@@ -102,19 +102,19 @@ public struct HangarEntry
 [Serializable]
 [Tab("general", caption: "General")]
 [Tab("limits", caption: "Limits")]
-[Tab("storage", caption: "Quasar Data")]
+[Tab("storage", caption: "Storage")]
 [Tab("advanced", caption: "Advanced")]
 [Section("runtime", parent: "general", caption: "Runtime")]
 [Section("save", parent: "general", caption: "Save And Load")]
 [Section("player-limits", parent: "limits", caption: "Player Limits")]
-[Section("central", parent: "storage", caption: "Central Hangar Data")]
+[Section("central", parent: "storage", caption: "Hangar Data")]
 [Section("compat", parent: "advanced", caption: "Compatibility")]
 public class PluginConfig : PluginSdk.Config.PluginConfig, IPluginConfig
 {
     [BoolOption("Enable the Hangar plugin", Parent = "runtime")]
     public bool Enabled { get; set => SetField(ref field, value); } = true;
 
-    [StringOption(description: "Central storage root managed by Quasar. Empty uses Space Engineers user data/Hangar.", Parent = "central")]
+    [StringOption(description: "Standalone storage root. Empty uses Space Engineers user data/Hangar. Cluster processes use PluginSdk shared storage automatically.", Parent = "central")]
     public string StorageRoot { get; set => SetField(ref field, value); } = "";
 
     [BoolOption("Include physically connected subgrids when saving/loading", Parent = "save")]
@@ -169,9 +169,9 @@ public class PluginConfig : PluginSdk.Config.PluginConfig, IPluginConfig
     [IntOption(0, int.MaxValue, "Maximum PCU in one stored entry. Zero means unlimited.", Parent = "player-limits")]
     public int MaxPcuPerEntry { get; set => SetField(ref field, value); } = 0;
 
-    [ListOption(description: "Central Quasar-managed hangar index", Parent = "central")]
+    [ListOption(description: "Legacy standalone hangar index; cluster entries live in shared plugin storage", Parent = "central")]
     public List<HangarEntry> HangarEntries { get; set => SetField(ref field, value); } = new();
 
-    [ListOption(description: "Cross-server save cooldown state", Parent = "central")]
+    [ListOption(description: "Legacy standalone cooldowns; cluster cooldowns live in shared plugin storage", Parent = "central")]
     public List<HangarCooldown> Cooldowns { get; set => SetField(ref field, value); } = new();
 }
