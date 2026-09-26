@@ -43,6 +43,24 @@ Linux.
 ## Configuration
 
 Magnetar stores configuration through the Plugin SDK config system.
+An empty `StorageRoot` keeps the declared default in configuration and resolves to
+`Space Engineers user data/Hangar` on a standalone server.
+
+In a cluster, Hangar ignores `StorageRoot` and uses
+`PluginStorage.GetSharedDirectory` automatically. Grid blobs and per-player entry
+indexes/cooldowns live there; operational changes never rewrite the canonical
+Plugin SDK configuration on individual nodes. Per-player file locks coordinate
+slot limits, cooldowns and consumption across nodes. Broadcasts are not used as
+the source of truth because starting nodes would miss earlier messages.
+
+The cluster launcher must set `CLUSTER_SHARED_ROOT`. For several Host machines,
+that path must be the same shared filesystem on every Host and support advisory
+file locks and atomic rename. Quasar currently provides the path automatically
+for a single Host; its multi-Host setup does not provision a shared mount.
+Hangar refuses to start in a cluster when legacy config entries or cooldowns
+are present. This version does not migrate them. Keep the original standalone
+config and grid blobs intact; start with an empty cluster Hangar or migrate the
+data separately before enabling the plugin there.
 
 ## Deployment
 

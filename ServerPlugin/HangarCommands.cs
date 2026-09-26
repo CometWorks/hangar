@@ -100,12 +100,13 @@ public abstract class HangarCommandModule : CommandModule
             return new[] { error };
 
         var config = plugin.PluginConfig;
+        var counts = plugin.Storage.Counts;
         return new[]
         {
             $"enabled: {config.Enabled}",
             $"storage_root: {plugin.Storage.StorageRoot}",
-            $"entries: {config.HangarEntries.Count}",
-            $"cooldowns: {config.Cooldowns.Count}",
+            $"entries: {counts.Entries}",
+            $"cooldowns: {counts.Cooldowns}",
             $"include_connected_grids: {config.IncludeConnectedGrids}",
             $"remove_original_on_save: {config.RemoveOriginalOnSave}",
             $"default_load_mode: {config.DefaultLoadMode}",

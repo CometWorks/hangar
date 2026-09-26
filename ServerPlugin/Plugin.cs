@@ -61,11 +61,6 @@ public class Plugin : IPlugin, ICommonPlugin
 
         _configPath = Path.Combine(MyFileSystem.UserDataPath, ConfigFileName);
         _config = ConfigStorage.LoadXml<PluginConfig>(_configPath);
-        if (string.IsNullOrWhiteSpace(_config.StorageRoot))
-        {
-            _config.StorageRoot = DefaultStorageRoot;
-            SaveConfig();
-        }
 
         var gameVersion = MyFinalBuildConstants.APP_VERSION_STRING.ToString();
         Common.SetPlugin(this, gameVersion, MyFileSystem.UserDataPath);

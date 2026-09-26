@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using PluginSdk.Clustering;
+using PluginSdk.Storage;
 using Sandbox.Game.Entities;
 using Sandbox.Game.Entities.Character;
 using Sandbox.Game.World;
@@ -18,19 +20,30 @@ namespace ServerPlugin;
 public sealed class HangarStorage
 {
     private const string BlobDirectoryName = "GridBlobs";
+    private const string PluginId = "17C928CE-4645-4E1B-9365-C3C46BFE061D";
 
     private readonly Plugin plugin;
+    private readonly ClusterHangarIndex clusterIndex;
 
     public HangarStorage(Plugin plugin)
     {
         this.plugin = plugin ?? throw new ArgumentNullException(nameof(plugin));
+        if (PluginCluster.IsClusterProcess)
+        {
+            if (Config.HangarEntries?.Count > 0 || Config.Cooldowns?.Count > 0)
+                throw new InvalidDataException("Legacy Hangar entries and cooldowns must be migrated with their grid blobs before clustered use.");
+            clusterIndex = new ClusterHangarIndex(PluginStorage.GetSharedDirectory(PluginId));
+        }
     }
 
     private PluginConfig Config => plugin.PluginConfig;
 
-    public string StorageRoot => string.IsNullOrWhiteSpace(Config.StorageRoot)
+    public string StorageRoot => clusterIndex?.Root ?? (string.IsNullOrWhiteSpace(Config.StorageRoot)
         ? Plugin.DefaultStorageRoot
-        : Config.StorageRoot;
+        : Config.StorageRoot);
+
+    public (int Entries, int Cooldowns) Counts => clusterIndex?.Counts()
+        ?? (Config.HangarEntries.Count, Config.Cooldowns.Count);
 
     public void EnsureStorage()
     {
@@ -40,7 +53,7 @@ public sealed class HangarStorage
 
     public IReadOnlyList<HangarEntry> ListPlayerEntries(ulong steamId)
     {
-        return Config.HangarEntries
+        return (clusterIndex?.Read(steamId).Entries ?? Config.HangarEntries)
             .Where(entry => entry.Scope == HangarEntryScope.Player &&
                             string.Equals(entry.OwnerId, steamId.ToString(CultureInfo.InvariantCulture), StringComparison.OrdinalIgnoreCase))
             .OrderBy(entry => ParseDate(entry.SavedUtc))
@@ -71,6 +84,7 @@ public sealed class HangarStorage
             return false;
         }
 
+        using var lease = clusterIndex?.Acquire(steamId);
         var playerEntries = ListPlayerEntries(steamId);
         if (Config.MaxEntriesPerPlayer > 0 && playerEntries.Count >= Config.MaxEntriesPerPlayer)
         {
@@ -78,7 +92,7 @@ public sealed class HangarStorage
             return false;
         }
 
-        if (!CheckCooldown(steamId, out error))
+        if (!CheckCooldown(steamId, lease?.State, out error))
             return false;
 
         if (!GridFinder.TryFind(gridNameOrEntityId, character, Config.IncludeConnectedGrids, out var grids))
@@ -114,7 +128,19 @@ public sealed class HangarStorage
         var id = Guid.NewGuid().ToString("N");
         var relativePath = string.Join("/", BlobDirectoryName, steamId.ToString(CultureInfo.InvariantCulture), id + ".sbc");
         var absolutePath = Path.Combine(StorageRoot, relativePath);
-        if (!GridSerializer.Save(absolutePath, mainGrid.DisplayName, grids))
+        var temporary = lease is null ? absolutePath : absolutePath + ".tmp-" + Guid.NewGuid().ToString("N");
+        bool saved;
+        try
+        {
+            saved = GridSerializer.Save(temporary, mainGrid.DisplayName, grids);
+            if (saved && lease is not null)
+            {
+                using (var file = new FileStream(temporary, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite)) file.Flush(true);
+                File.Move(temporary, absolutePath);
+            }
+        }
+        finally { if (lease is not null) TryDelete(temporary); }
+        if (!saved)
         {
             error = "Failed to write grid data.";
             return false;
@@ -143,10 +169,19 @@ public sealed class HangarStorage
             Description = ""
         };
 
-        Config.HangarEntries.Add(entry);
-        Config.NotifyChanged(nameof(Config.HangarEntries));
-        SetCooldown(steamId);
-        plugin.SaveConfig();
+        if (lease is not null)
+        {
+            lease.State.Entries.Add(entry);
+            lease.State.LastSaveUtc = entry.SavedUtc;
+            lease.Save();
+        }
+        else
+        {
+            Config.HangarEntries.Add(entry);
+            Config.NotifyChanged(nameof(Config.HangarEntries));
+            SetCooldown(steamId);
+            plugin.SaveConfig();
+        }
 
         if (Config.RemoveOriginalOnSave)
         {
@@ -175,6 +210,7 @@ public sealed class HangarStorage
             return false;
         }
 
+        using var lease = clusterIndex?.Acquire(steamId);
         if (!TryResolvePlayerEntry(steamId, selector, out entry, out error))
             return false;
 
@@ -206,9 +242,10 @@ public sealed class HangarStorage
             MyEntities.CreateFromObjectBuilderAndAdd(grid, true);
         }
 
-        RemoveEntry(entry);
+        if (lease is not null) { var id = entry.Id; lease.State.Entries.RemoveAll(e => e.Id == id); lease.Save(); }
+        else RemoveEntry(entry);
         TryDelete(absolutePath);
-        plugin.SaveConfig();
+        if (lease is null) plugin.SaveConfig();
         return true;
     }
 
@@ -217,12 +254,14 @@ public sealed class HangarStorage
         entry = default;
         error = null;
 
+        using var lease = clusterIndex?.Acquire(steamId);
         if (!TryResolvePlayerEntry(steamId, selector, out entry, out error))
             return false;
 
-        RemoveEntry(entry);
+        if (lease is not null) { var id = entry.Id; lease.State.Entries.RemoveAll(e => e.Id == id); lease.Save(); }
+        else RemoveEntry(entry);
         TryDelete(GetAbsoluteBlobPath(entry));
-        plugin.SaveConfig();
+        if (lease is null) plugin.SaveConfig();
         return true;
     }
 
@@ -298,15 +337,17 @@ public sealed class HangarStorage
         return false;
     }
 
-    private bool CheckCooldown(ulong steamId, out string error)
+    private bool CheckCooldown(ulong steamId, HangarPlayerState state, out string error)
     {
         error = null;
         if (Config.SaveCooldownMinutes <= 0)
             return true;
 
-        var current = Config.Cooldowns.FirstOrDefault(c => c.SteamId == steamId.ToString(CultureInfo.InvariantCulture));
-        if (string.IsNullOrWhiteSpace(current.LastSaveUtc) ||
-            !DateTimeOffset.TryParse(current.LastSaveUtc, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var lastSave))
+        var timestamp = state is null
+            ? Config.Cooldowns.FirstOrDefault(c => c.SteamId == steamId.ToString(CultureInfo.InvariantCulture)).LastSaveUtc
+            : state.LastSaveUtc;
+        if (string.IsNullOrWhiteSpace(timestamp) ||
+            !DateTimeOffset.TryParse(timestamp, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var lastSave))
             return true;
 
         var availableAt = lastSave.AddMinutes(Config.SaveCooldownMinutes);
@@ -334,6 +375,16 @@ public sealed class HangarStorage
 
     private string GetAbsoluteBlobPath(HangarEntry entry)
     {
+        if (clusterIndex is not null)
+        {
+            var parts = entry.BlobPath?.Split('/');
+            if (parts?.Length != 3 || parts[0] != BlobDirectoryName
+                || !ulong.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out _)
+                || !Guid.TryParseExact(Path.GetFileNameWithoutExtension(parts[2]), "N", out _)
+                || Path.GetExtension(parts[2]) != ".sbc")
+                throw new InvalidDataException("Stored Hangar blob path is invalid.");
+            return Path.Combine(StorageRoot, parts[0], parts[1], parts[2]);
+        }
         return Path.IsPathRooted(entry.BlobPath)
             ? entry.BlobPath
             : Path.Combine(new[] { StorageRoot }
