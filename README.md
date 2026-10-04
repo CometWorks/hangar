@@ -33,12 +33,10 @@ ServerPlugin/bin/Debug/net10.0/Hangar.dll
 The plugin version lives in `Version.Build.props`, which **is** committed and imported by
 `Directory.Build.props`. Bump the version there at a single place.
 
-`Directory.Build.props.template` is a template for `Directory.Build.props`. The latter is a
-local config file (not committed) where you can override the reference folder paths
-(`Magnetar` and `Dedicated64`). `setup.py` copies the template to `Directory.Build.props` if
-it does not exist yet, then fills in the auto-detected paths. Leaving a path empty falls back
-to the platform-specific auto-detection in the file, so the build works on both Windows and
-Linux.
+`Directory.Build.props` auto-detects the Dedicated Server (`Dedicated64`) and the Magnetar
+installation (`Magnetar`) on Windows and Linux. To override them, set them in
+`Directory.Build.props.user`, which is not committed. `setup.py` writes that file with the
+auto-detected Dedicated Server folder.
 
 ## Configuration
 
@@ -62,18 +60,17 @@ are present. This version does not migrate them. Keep the original standalone
 config and grid blobs intact; start with an empty cluster Hangar or migrate the
 data separately before enabling the plugin there.
 
-## Deployment
+## Development and deployment
 
-Use the Magnetar local plugin folder or the included deploy scripts after a build:
+Load the working copy through a Magnetar development folder: start Magnetar with `-sources`
+and add the repository with the Sources button. Magnetar then compiles the plugin from source.
+
+Builds deploy nothing by default. To copy the build into `<MagnetarData>/Local`, set
+`MagnetarData` (the Magnetar config folder) in `Directory.Build.props.user` or pass it to a
+single build:
 
 ```sh
-ServerPlugin/Deploy.sh Hangar.dll ServerPlugin/bin/Debug/net10.0
-```
-
-On Windows:
-
-```bat
-ServerPlugin\Deploy.bat Hangar.dll ServerPlugin\bin\Debug\net10.0
+dotnet build Hangar.sln -p:MagnetarData=$HOME/.config/Magnetar/Magnetar
 ```
 
 `Hangar.xml` is the MagnetarHub metadata file for server-side publication.
