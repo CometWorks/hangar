@@ -24,7 +24,8 @@
         With the !hangar (!h) chat commands players can save the grid they are looking
         at or one named explicitly, list their stored grids with block and PCU
         summaries, view detailed grid info, load a grid back into the world near
-        themselves or at its original position, and delete entries; admins can toggle
+        themselves or at its original position (moved aside if something took the
+        spot), and delete entries; admins can toggle
         the plugin and check its status.
 
         Configurable options include per-player slot limits, save cooldowns, block and

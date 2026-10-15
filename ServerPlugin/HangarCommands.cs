@@ -52,11 +52,21 @@ public abstract class HangarCommandModule : CommandModule
             gridNameOrEntityId,
             out var entry,
             out error)
-            ? $"Saved {entry.GridName} to hangar as {entry.Id.Substring(0, 8)}."
+            ? $"Saved {entry.GridName} to hangar as {entry.Id.Substring(0, HangarStorage.ShownIdLength)}."
             : error;
     }
 
-    protected string LoadEntry(string selector, bool nearPlayer)
+    // The SDK drops arguments beyond the parameters, so the selector is taken as params and
+    // joined: an unquoted name of several words would otherwise be cut to its first word.
+    protected string LoadEntry(string[] words)
+    {
+        var nearPlayer = false;
+        if (words.Length > 1 && bool.TryParse(words[words.Length - 1], out nearPlayer))
+            words = words.Take(words.Length - 1).ToArray();
+        return LoadEntry(string.Join(" ", words), nearPlayer);
+    }
+
+    private string LoadEntry(string selector, bool nearPlayer)
     {
         if (!TryGetPlugin(out var plugin, out var error))
             return error;
@@ -82,8 +92,9 @@ public abstract class HangarCommandModule : CommandModule
             : error;
     }
 
-    protected string RemoveEntry(string selector)
+    protected string RemoveEntry(string selector, string[] more)
     {
+        selector = string.Join(" ", new[] { selector }.Concat(more));
         if (!TryGetPlugin(out var plugin, out var error))
             return error;
         if (!TryGetPlayerCaller(out var steamId, out _, out _, out error))
@@ -205,7 +216,7 @@ public sealed class HangarCommands : HangarCommandModule
 
     [Command("info", "Shows one stored grid")]
     [Permission(MyPromoteLevel.None)]
-    public IEnumerable<string> Info(string selector = "") => EntryInfo(selector);
+    public IEnumerable<string> Info(params string[] selector) => EntryInfo(string.Join(" ", selector));
 
     [Command("save", "Saves the looked-at grid or a named grid")]
     [Permission(MyPromoteLevel.None)]
@@ -213,15 +224,15 @@ public sealed class HangarCommands : HangarCommandModule
 
     [Command("load", "Loads one stored grid. Add true to force near-player placement")]
     [Permission(MyPromoteLevel.None)]
-    public string Load(string selector = "", bool nearPlayer = false) => LoadEntry(selector, nearPlayer);
+    public string Load(params string[] selector) => LoadEntry(selector);
 
     [Command("remove", "Deletes one stored grid")]
     [Permission(MyPromoteLevel.None)]
-    public string Remove(string selector) => RemoveEntry(selector);
+    public string Remove(string selector, params string[] more) => RemoveEntry(selector, more);
 
     [Command("delete", "Deletes one stored grid")]
     [Permission(MyPromoteLevel.None)]
-    public string Delete(string selector) => RemoveEntry(selector);
+    public string Delete(string selector, params string[] more) => RemoveEntry(selector, more);
 
     [Command("status", "Shows Hangar runtime state")]
     [Permission(MyPromoteLevel.Admin)]
@@ -249,7 +260,7 @@ public sealed class HangarShortCommands : HangarCommandModule
 
     [Command("info", "Shows one stored grid")]
     [Permission(MyPromoteLevel.None)]
-    public IEnumerable<string> Info(string selector = "") => EntryInfo(selector);
+    public IEnumerable<string> Info(params string[] selector) => EntryInfo(string.Join(" ", selector));
 
     [Command("save", "Saves the looked-at grid or a named grid")]
     [Permission(MyPromoteLevel.None)]
@@ -257,13 +268,13 @@ public sealed class HangarShortCommands : HangarCommandModule
 
     [Command("load", "Loads one stored grid. Add true to force near-player placement")]
     [Permission(MyPromoteLevel.None)]
-    public string Load(string selector = "", bool nearPlayer = false) => LoadEntry(selector, nearPlayer);
+    public string Load(params string[] selector) => LoadEntry(selector);
 
     [Command("remove", "Deletes one stored grid")]
     [Permission(MyPromoteLevel.None)]
-    public string Remove(string selector) => RemoveEntry(selector);
+    public string Remove(string selector, params string[] more) => RemoveEntry(selector, more);
 
     [Command("delete", "Deletes one stored grid")]
     [Permission(MyPromoteLevel.None)]
-    public string Delete(string selector) => RemoveEntry(selector);
+    public string Delete(string selector, params string[] more) => RemoveEntry(selector, more);
 }

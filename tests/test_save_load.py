@@ -4,8 +4,6 @@ saves his own ships unless a test says otherwise."""
 
 from __future__ import annotations
 
-import pytest
-
 import world
 from conftest import distance, saved_id, wait_until
 
@@ -225,7 +223,6 @@ def test_pilot_is_left_out(game):
     assert (grid["blocks"], grid["pilots"]) == (world.SHIP_BLOCKS, 0)
 
 
-@pytest.mark.xfail(strict=True, reason="SE1-0240: a load does not look for free space")
 def test_load_does_not_overlap_another_grid(game):
     """Something else took the spot since the save: the load must not put the
     grid inside it. Both are stations, so physics doesn't push them apart."""
@@ -237,6 +234,6 @@ def test_load_does_not_overlap_another_grid(game):
     game.paste("Squatter", static=True)
     assert distance(game.grid("Squatter")["pos"], origin) < 0.5
 
-    reply = a.hangar("load")
-    if reply == "Loaded Spot keeper from hangar.":
-        assert distance(game.grid("Spot keeper")["pos"], origin) > 10
+    assert a.hangar("load") == "Loaded Spot keeper from hangar."
+    assert distance(game.grid("Spot keeper")["pos"], origin) > 10
+    assert distance(game.grid("Squatter")["pos"], origin) < 0.5

@@ -88,8 +88,8 @@ What it covers:
 - Saving a grid by name, by entity id or by looking at it, and loading it back: blocks,
   inventory, static grids, ownership with and without the transfer to the loader, near
   the player or at the original position, keeping the original on save, rotor heads and
-  docked ships with and without connected grids, and a pilot getting out
-  (`test_save_load.py`)
+  docked ships with and without connected grids, a pilot getting out, and a load moved
+  aside when another grid took its spot (`test_save_load.py`)
 - Who may save what and how often: majority ownership, the slot, block and PCU limits,
   the save cooldown, and the plugin switched off (`test_rules.py`)
 - The `!hangar` and `!h` commands: list, info, entry selectors, remove and delete,

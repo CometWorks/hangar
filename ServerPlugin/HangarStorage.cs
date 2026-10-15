@@ -3,8 +3,10 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using Havok;
 using PluginSdk.Clustering;
 using PluginSdk.Storage;
+using Sandbox;
 using Sandbox.Game.Entities;
 using Sandbox.Game.Entities.Character;
 using Sandbox.Game.World;
@@ -21,6 +23,9 @@ public sealed class HangarStorage
 {
     private const string BlobDirectoryName = "GridBlobs";
     private const string PluginId = "17C928CE-4645-4E1B-9365-C3C46BFE061D";
+
+    /// <summary>Number of leading id characters the list and the save reply show</summary>
+    public const int ShownIdLength = 8;
 
     private readonly Plugin plugin;
     private readonly ClusterHangarIndex clusterIndex;
@@ -235,6 +240,12 @@ public sealed class HangarStorage
             MoveNearCharacter(grids, character);
         }
 
+        if (!TryMoveToFreeSpace(grids))
+        {
+            error = $"No free space to load {entry.GridName}. Clear the spot or load it elsewhere.";
+            return false;
+        }
+
         MyEntities.RemapObjectBuilderCollection(grids);
         foreach (var grid in grids)
         {
@@ -267,7 +278,7 @@ public sealed class HangarStorage
 
     public string Describe(HangarEntry entry, int index)
     {
-        return $"{index}. {entry.GridName} [{entry.Id.Substring(0, Math.Min(8, entry.Id.Length))}] " +
+        return $"{index}. {entry.GridName} [{entry.Id.Substring(0, Math.Min(ShownIdLength, entry.Id.Length))}] " +
                $"{entry.GridCount} grids, {entry.Blocks} blocks, {entry.Pcu} PCU, saved {FormatDate(entry.SavedUtc)}";
     }
 
@@ -309,21 +320,21 @@ public sealed class HangarStorage
             return false;
         }
 
-        if (int.TryParse(selector, NumberStyles.Integer, CultureInfo.InvariantCulture, out var number))
+        var isNumber = int.TryParse(selector, NumberStyles.Integer, CultureInfo.InvariantCulture, out var number);
+        if (isNumber && number >= 1 && number <= entries.Count)
         {
-            if (number >= 1 && number <= entries.Count)
-            {
-                entry = entries[number - 1];
-                return true;
-            }
-
-            error = $"No hangar entry #{number}.";
-            return false;
+            entry = entries[number - 1];
+            return true;
         }
 
+        // Any other number is an all-digit id as the list shows it, or a grid named exactly that.
+        // Looser matching would let a mistyped list number pick, or remove, an unrelated entry.
         var matches = entries
-            .Where(e => e.Id.StartsWith(selector, StringComparison.OrdinalIgnoreCase) ||
-                        e.GridName.IndexOf(selector, StringComparison.OrdinalIgnoreCase) >= 0)
+            .Where(e => isNumber
+                ? (selector.Length >= ShownIdLength && e.Id.StartsWith(selector, StringComparison.OrdinalIgnoreCase)) ||
+                  string.Equals(e.GridName, selector, StringComparison.OrdinalIgnoreCase)
+                : e.Id.StartsWith(selector, StringComparison.OrdinalIgnoreCase) ||
+                  e.GridName.IndexOf(selector, StringComparison.OrdinalIgnoreCase) >= 0)
             .ToList();
         if (matches.Count == 1)
         {
@@ -331,9 +342,9 @@ public sealed class HangarStorage
             return true;
         }
 
-        error = matches.Count == 0
-            ? $"No hangar entry matches '{selector}'."
-            : $"Multiple hangar entries match '{selector}'. Use number or id.";
+        error = matches.Count > 1 ? $"Multiple hangar entries match '{selector}'. Use number or id."
+            : isNumber ? $"No hangar entry #{number}."
+            : $"No hangar entry matches '{selector}'.";
         return false;
     }
 
@@ -409,6 +420,57 @@ public sealed class HangarStorage
             grid.PositionAndOrientation = new MyPositionAndOrientation(current);
         }
     }
+
+    // Leaves the grids where they are when nothing is in the way, otherwise moves them all to a
+    // free spot nearby that the game's spawn search finds. False when it finds none.
+    private static bool TryMoveToFreeSpace(IReadOnlyList<MyObjectBuilder_CubeGrid> grids)
+    {
+        if (!grids.Any(IsObstructed))
+            return true;
+
+        var bounds = BoundingBoxD.CreateInvalid();
+        foreach (var grid in grids)
+            bounds.Include(((BoundingBoxD)grid.CalculateBoundingBox()).TransformFast(WorldMatrix(grid)));
+
+        var sphere = BoundingSphereD.CreateFromBoundingBox(bounds);
+        var free = MyEntities.FindFreePlaceCustom(sphere.Center, (float)sphere.Radius, maxTestCount: 50, testsPerDistance: 10);
+        if (free == null)
+            return false;
+
+        foreach (var grid in grids)
+        {
+            var matrix = WorldMatrix(grid);
+            matrix.Translation += free.Value - sphere.Center;
+            grid.PositionAndOrientation = new MyPositionAndOrientation(matrix);
+        }
+
+        return true;
+    }
+
+    // ponytail: the grid's bounding box against the physics of everything else, so an L-shaped grid
+    // can be refused a spot it would fit in; test per block if that bites. Terrain doesn't count:
+    // a grid saved on the ground goes back into it. The box is shrunk a little so a grid that was
+    // resting on another one, like a ship on a landing pad, still fits.
+    private static bool IsObstructed(MyObjectBuilder_CubeGrid grid)
+    {
+        var matrix = WorldMatrix(grid);
+        var box = grid.CalculateBoundingBox();
+        var center = Vector3D.Transform((Vector3D)box.Center, matrix);
+        var rotation = Quaternion.CreateFromRotationMatrix(in matrix);
+        HkShape shape = new HkBoxShape(Vector3.Max(box.HalfExtents - 0.25f, new Vector3(0.05f)));
+        try
+        {
+            return MyEntities.IsShapePenetrating(shape, ref center, ref rotation,
+                entity => entity is MyVoxelBase || entity is MyFloatingObject, allowSafezones: true);
+        }
+        finally
+        {
+            shape.RemoveReference();
+        }
+    }
+
+    private static MatrixD WorldMatrix(MyObjectBuilder_CubeGrid grid) =>
+        grid.PositionAndOrientation?.GetMatrix() ?? MatrixD.Identity;
 
     private static bool HasMajorityOwnership(MyCubeGrid grid, long identityId)
     {
