@@ -127,9 +127,10 @@ uv run pytest
 Where GitHub's API rate limits Magnetar, export `PULSAR_GITHUB_TOKEN` for it to download
 its hub plugins with. `HG_SKIP_CLUSTER=1` leaves out the cluster tests.
 
-A full run takes about 25 minutes, a third of it the server restarts and the cluster nodes. `tests/rig.py` lists the environment variables that
-point the rig at other installations and working copies. To keep the server and clients
-running between runs while you work on a test:
+A full run takes about 25 minutes, a third of it the server restarts and the cluster
+nodes. `tests/rig.py` lists the environment variables that point the rig at other
+installations and working copies. To keep the server and clients running between runs
+while you work on a test:
 
 ```bash
 uv run python tests/session.py start
