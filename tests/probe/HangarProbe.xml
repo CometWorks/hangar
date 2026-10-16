@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<PluginData xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="GitHubPlugin">
+
+    <!-- Test-only server plugin of the Hangar suite, loaded as a dev folder.
+         Never published to a hub. -->
+    <Id>13666DED-480B-470C-9102-40AC2320280D</Id>
+    <RepoId>CometWorks/hangar</RepoId>
+    <FriendlyName>Hangar Probe</FriendlyName>
+    <Author>CometWorks</Author>
+    <Tooltip>Test hooks for the Hangar test suite</Tooltip>
+    <Commit>TODO Git commit hash</Commit>
+
+</PluginData>
