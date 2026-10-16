@@ -85,8 +85,7 @@ class Player:
         return self.command(" ".join(["!hgprobe", *map(str, args)]))
 
     def entry_id(self, number: int = 1) -> str:
-        """The full id of an entry. A selector of the 8 digits the list shows
-        may be all decimal digits, which SE1-0237 reads as a list number."""
+        """The full id of an entry"""
         return self.hangar("info", number).splitlines()[0].removeprefix("id: ")
 
     def entries(self) -> list[str]:

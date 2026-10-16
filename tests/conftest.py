@@ -71,11 +71,14 @@ class Game:
         counter.write_text(str(k + 1))
         x, y, z = SITE_START
         self.site = (x + SITE_SPACING_M * k, y, z)
+        self.go_to_site()
+        return self.site
+
+    def go_to_site(self) -> None:
         self.a.api.character_teleport(*self.site)
         wait_until(
             lambda: distance(self.a.position(), self.site) < 5, 20, "the teleport"
         )
-        return self.site
 
     def at(self, dx: float = 0.0, dy: float = 0.0, dz: float = 0.0):
         x, y, z = self.site
@@ -149,6 +152,9 @@ class Game:
         self.server.stop()
         self.server.start()
         self.restart_clients()
+        # Player A may come back as a new character at the spawn point, out of
+        # the sync distance of the site, where his pastes would never show up
+        self.go_to_site()
 
     def restart_clients(self) -> None:
         session.join_all()

@@ -77,19 +77,19 @@ def test_selectors(game, selector):
     assert "name: Alpha one" in game.a.hangar("info", selector).splitlines()
 
 
-MULTI_WORD = pytest.mark.xfail(
-    strict=True,
-    reason="SE1-0229: the selector is cut to its first word, the rest is dropped",
-)
-
-
-@MULTI_WORD
 def test_multi_word_selector(game):
     save_two(game)
     assert "name: Alpha one" in game.a.hangar("info Alpha one").splitlines()
 
 
-@MULTI_WORD
+def test_multi_word_load_with_placement_flag(game):
+    """A trailing true or false is the placement flag, not part of the name"""
+    save_two(game)
+    assert game.a.hangar("load Alpha two true") == "Loaded Alpha two from hangar."
+    assert game.a.hangar("load 1 maybe") == "No hangar entry matches '1 maybe'."
+    assert game.a.entries() == ["Alpha one"]
+
+
 def test_remove_with_a_name_that_matches_no_entry(game):
     game.paste("Rover")
     saved_id(game.a.hangar("save Rover"))
@@ -97,9 +97,6 @@ def test_remove_with_a_name_that_matches_no_entry(game):
     assert game.a.entries() == ["Rover"]
 
 
-@pytest.mark.xfail(
-    strict=True, reason="SE1-0237: a selector of digits is always read as a list number"
-)
 def test_numeric_name_selector(game):
     game.paste("1999")
     saved_id(game.a.hangar("save 1999"))
@@ -159,7 +156,7 @@ def test_save_by_entity_id(game):
 
 @pytest.mark.parametrize(
     "command",
-    ["remove", "delete", "load 1 maybe"],
+    ["remove", "delete"],
 )
 def test_bad_arguments(game, command):
     reply = game.a.hangar(command)
