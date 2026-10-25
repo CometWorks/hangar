@@ -89,6 +89,9 @@ public struct HangarEntry
     [StructMember("Original position Z")]
     public double OriginalZ { get; set; }
 
+    [StructMember("Admin safe zone the grid was saved in, empty for none")]
+    public string Zone { get; set; }
+
     [StructMember("Market flag reserved for future market support")]
     public bool ForSale { get; set; }
 
@@ -167,6 +170,16 @@ public class PluginConfig : PluginSdk.Config.PluginConfig, IPluginConfig
         get;
         set => SetField(ref field, value);
     } = 150;
+
+    [BoolOption(
+        "Save and load only inside an admin safe zone (one not made by a safe zone block), like a station's. A grid loads inside the zone the player stands in.",
+        Parent = "save"
+    )]
+    public bool AdminSafeZonesOnly
+    {
+        get;
+        set => SetField(ref field, value);
+    } = false;
 
     [BoolOption(
         "Require the caller to own a majority of functional blocks on the main grid",

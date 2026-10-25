@@ -58,6 +58,7 @@ def test_info(game):
         "pcu",
         "blob",
         "original_position",
+        "zone",
     ]
     values = dict(line.split(": ", 1) for line in info)
     assert values["id"] == first
@@ -184,6 +185,7 @@ def test_status(game):
         "include_connected_grids": "True",
         "remove_original_on_save": "True",
         "default_load_mode": "NearPlayer",
+        "admin_safe_zones_only": "False",
         "block_vanilla_grid_storage": "True",
         "block_vanilla_hangar_commands": "True",
         "blocked_hangar_roots": "hangar, h, factionhangar, fh, alliancehangar, ah, "

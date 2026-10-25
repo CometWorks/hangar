@@ -7,6 +7,7 @@ using Havok;
 using PluginSdk.Clustering;
 using PluginSdk.Storage;
 using Sandbox;
+using Sandbox.Common.ObjectBuilders;
 using Sandbox.Game.Entities;
 using Sandbox.Game.Entities.Character;
 using Sandbox.Game.World;
@@ -135,6 +136,16 @@ public sealed class HangarStorage
             return false;
         }
 
+        var bounds = BoundingBoxD.CreateInvalid();
+        foreach (var grid in grids)
+            bounds.Include(grid.PositionComp.WorldAABB);
+        var zone = AdminZoneAt(bounds.Center);
+        if (Config.AdminSafeZonesOnly && zone == null)
+        {
+            error = "You can only save grids inside a station's safe zone.";
+            return false;
+        }
+
         var blocks = grids.Sum(grid => grid.BlocksCount);
         var pcu = grids.Sum(grid => grid.BlocksPCU);
         if (Config.MaxBlocksPerEntry > 0 && blocks > Config.MaxBlocksPerEntry)
@@ -212,6 +223,7 @@ public sealed class HangarStorage
             OriginalX = position.X,
             OriginalY = position.Y,
             OriginalZ = position.Z,
+            Zone = ZoneName(zone),
             Description = "",
         };
 
@@ -257,6 +269,17 @@ public sealed class HangarStorage
             return false;
         }
 
+        MySafeZone zone = null;
+        if (Config.AdminSafeZonesOnly)
+        {
+            zone = character == null ? null : AdminZoneAt(character.PositionComp.GetPosition());
+            if (zone == null)
+            {
+                error = "You can only load grids inside a station's safe zone.";
+                return false;
+            }
+        }
+
         using var lease = clusterIndex?.Acquire(steamId);
         if (!TryResolvePlayerEntry(steamId, selector, out entry, out error))
             return false;
@@ -271,7 +294,12 @@ public sealed class HangarStorage
         if (Config.TransferOwnershipOnLoad)
             GridSerializer.TransferOwnership(grids, identityId);
 
-        if (nearPlayer || Config.DefaultLoadMode == HangarLoadMode.NearPlayer)
+        // In a zone the grid goes back where it was when it was saved there, else near the player
+        var near =
+            zone != null
+                ? nearPlayer || entry.Zone != ZoneName(zone)
+                : nearPlayer || Config.DefaultLoadMode == HangarLoadMode.NearPlayer;
+        if (near)
         {
             if (character == null)
             {
@@ -282,11 +310,25 @@ public sealed class HangarStorage
             MoveNearCharacter(grids, character);
         }
 
-        if (!TryMoveToFreeSpace(grids))
+        if (zone != null)
+            MoveInside(zone, grids);
+
+        if (!TryMoveToFreeSpace(grids, zone != null))
         {
             error = $"No free space to load {entry.GridName}. Clear the spot or load it elsewhere.";
             return false;
         }
+
+        var bounds = Bounds(grids);
+        if (zone != null && zone.Containment(ref bounds) != ContainmentType.Contains)
+        {
+            error =
+                $"No free space for {entry.GridName} inside {ZoneName(zone)}. Clear some room or load it elsewhere.";
+            return false;
+        }
+
+        if (!AllowLoad(identityId, entry, ZoneName(zone ?? AdminZoneAt(bounds.Center)), out error))
+            return false;
 
         MyEntities.RemapObjectBuilderCollection(grids);
         foreach (var grid in grids)
@@ -340,7 +382,8 @@ public sealed class HangarStorage
     public string Describe(HangarEntry entry, int index)
     {
         return $"{index}. {entry.GridName} [{entry.Id.Substring(0, Math.Min(ShownIdLength, entry.Id.Length))}] "
-            + $"{entry.GridCount} grids, {entry.Blocks} blocks, {entry.Pcu} PCU, saved {FormatDate(entry.SavedUtc)}";
+            + $"{entry.GridCount} grids, {entry.Blocks} blocks, {entry.Pcu} PCU, saved {FormatDate(entry.SavedUtc)}"
+            + (string.IsNullOrEmpty(entry.Zone) ? "" : $" in {entry.Zone}");
     }
 
     public IEnumerable<string> DescribeDetails(HangarEntry entry)
@@ -355,6 +398,7 @@ public sealed class HangarStorage
         yield return $"pcu: {entry.Pcu}";
         yield return $"blob: {entry.BlobPath}";
         yield return $"original_position: {entry.OriginalX:0.##}, {entry.OriginalY:0.##}, {entry.OriginalZ:0.##}";
+        yield return $"zone: {entry.Zone}";
     }
 
     public bool TryResolvePlayerEntry(
@@ -524,36 +568,101 @@ public sealed class HangarStorage
     }
 
     // Leaves the grids where they are when nothing is in the way, otherwise moves them all to a
-    // free spot nearby that the game's spawn search finds. False when it finds none.
-    private static bool TryMoveToFreeSpace(IReadOnlyList<MyObjectBuilder_CubeGrid> grids)
+    // free spot nearby that the game's spawn search finds. False when it finds none. That search
+    // skips safe zones unless inZone allows them.
+    private static bool TryMoveToFreeSpace(
+        IReadOnlyList<MyObjectBuilder_CubeGrid> grids,
+        bool inZone
+    )
     {
         if (!grids.Any(IsObstructed))
             return true;
 
+        var sphere = BoundingSphereD.CreateFromBoundingBox(Bounds(grids));
+        var free = MyEntities.FindFreePlaceCustom(
+            sphere.Center,
+            (float)sphere.Radius,
+            maxTestCount: 50,
+            testsPerDistance: 10,
+            allowSafezones: inZone
+        );
+        if (free == null)
+            return false;
+
+        Shift(grids, free.Value - sphere.Center);
+        return true;
+    }
+
+    // Pulls the grids toward the center of a sphere zone until their bounds fit in it, if they can
+    private static void MoveInside(MySafeZone zone, IReadOnlyList<MyObjectBuilder_CubeGrid> grids)
+    {
+        if (zone.Shape != MySafeZoneShape.Sphere)
+            return;
+
+        var sphere = BoundingSphereD.CreateFromBoundingBox(Bounds(grids));
+        var offset = sphere.Center - zone.PositionComp.GetPosition();
+        var room = zone.Radius - sphere.Radius;
+        // A grid's width of slack, so that a shift to free space stays inside
+        if (room > 2 * sphere.Radius)
+            room -= 2 * sphere.Radius;
+        var distance = offset.Length();
+        if (room > 0 && distance > room)
+            Shift(grids, offset * (room / distance - 1));
+    }
+
+    private static void Shift(IReadOnlyList<MyObjectBuilder_CubeGrid> grids, Vector3D delta)
+    {
+        foreach (var grid in grids)
+        {
+            var matrix = WorldMatrix(grid);
+            matrix.Translation += delta;
+            grid.PositionAndOrientation = new MyPositionAndOrientation(matrix);
+        }
+    }
+
+    private static BoundingBoxD Bounds(IReadOnlyList<MyObjectBuilder_CubeGrid> grids)
+    {
         var bounds = BoundingBoxD.CreateInvalid();
         foreach (var grid in grids)
             bounds.Include(
                 ((BoundingBoxD)grid.CalculateBoundingBox()).TransformFast(WorldMatrix(grid))
             );
+        return bounds;
+    }
 
-        var sphere = BoundingSphereD.CreateFromBoundingBox(bounds);
-        var free = MyEntities.FindFreePlaceCustom(
-            sphere.Center,
-            (float)sphere.Radius,
-            maxTestCount: 50,
-            testsPerDistance: 10
+    // An admin safe zone is one an admin or the world made, not a safe zone block
+    private static MySafeZone AdminZoneAt(Vector3D point) =>
+        MySessionComponentSafeZones.SafeZones.FirstOrDefault(zone =>
+            zone.Enabled
+            && !zone.MarkedForClose
+            && zone.SafeZoneBlockId == 0
+            && zone.Contains(point)
         );
-        if (free == null)
-            return false;
 
-        foreach (var grid in grids)
+    private static string ZoneName(MySafeZone zone) =>
+        zone == null ? ""
+        : string.IsNullOrWhiteSpace(zone.DisplayName)
+            ? zone.EntityId.ToString(CultureInfo.InvariantCulture)
+        : zone.DisplayName;
+
+    private bool AllowLoad(long identityId, HangarEntry entry, string zone, out string error)
+    {
+        error = null;
+        var hook = HangarHooks.BeforeLoad;
+        if (hook == null)
+            return true;
+
+        try
         {
-            var matrix = WorldMatrix(grid);
-            matrix.Translation += free.Value - sphere.Center;
-            grid.PositionAndOrientation = new MyPositionAndOrientation(matrix);
+            error = hook(identityId, entry.Zone ?? "", zone, entry.Pcu);
+        }
+        catch (Exception exception)
+        {
+            plugin.Log.Error(exception, "Hangar's BeforeLoad hook failed");
+            error = "Hangar can't load grids right now.";
         }
 
-        return true;
+        return error == null;
     }
 
     // ponytail: the grid's bounding box against the physics of everything else, so an L-shaped grid

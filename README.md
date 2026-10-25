@@ -51,6 +51,18 @@ Plugin SDK configuration on individual nodes. Per-player file locks coordinate
 slot limits, cooldowns and consumption across nodes. Broadcasts are not used as
 the source of truth because starting nodes would miss earlier messages.
 
+`AdminSafeZonesOnly` keeps saving and loading inside admin safe zones, the ones an admin
+or the world made rather than a safe zone block, such as a world's trade stations. An
+entry remembers the zone it was saved in. A grid loaded in that zone goes back where it
+was saved; in another zone it loads near the player and is pulled inside the zone, and a
+zone with no room for it refuses the load.
+
+Other server plugins can check or charge for a load through
+`ServerPlugin.HangarHooks.BeforeLoad`, which they set by reflection. Hangar calls it once
+the grid's spot is found, with the player's identity id, the zone the grid was saved in,
+the zone it comes back in and its PCU. A non-null result refuses the load, and the player
+gets it as the reply.
+
 The cluster launcher must set `CLUSTER_SHARED_ROOT`. For several Host machines,
 that path must be the same shared filesystem on every Host and support advisory
 file locks and atomic rename. Quasar currently provides the path automatically
@@ -100,6 +112,9 @@ What it covers:
   (`test_restart.py`)
 - Two cluster nodes sharing one storage: entries, slot limit and cooldown across nodes,
   and a node with legacy standalone entries (`test_cluster.py`)
+- Admin safe zones only: saving and loading outside a zone, a grid back in its own zone
+  or pulled into another one, a zone too small for it, and the `BeforeLoad` hook
+  (`test_zones.py`)
 
 The world is the game's Empty World with the two test players, written fresh for every
 run; each test pastes its own grids at a spot of its own. `tests/probe` is a test-only
