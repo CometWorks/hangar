@@ -9,7 +9,8 @@ public class SdkPluginLogger : LogFormatter, IPluginLogger
 {
     private readonly Logger logger;
 
-    public SdkPluginLogger(string pluginName) : base("")
+    public SdkPluginLogger(string pluginName)
+        : base("")
     {
         logger = Logger.Create(pluginName);
     }
@@ -22,22 +23,28 @@ public class SdkPluginLogger : LogFormatter, IPluginLogger
     public bool IsCriticalEnabled => true;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void Trace(Exception ex, string message, params object[] data) => WriteLog(LogLevel.Debug, ex, message, data);
+    public void Trace(Exception ex, string message, params object[] data) =>
+        WriteLog(LogLevel.Debug, ex, message, data);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void Debug(Exception ex, string message, params object[] data) => WriteLog(LogLevel.Debug, ex, message, data);
+    public void Debug(Exception ex, string message, params object[] data) =>
+        WriteLog(LogLevel.Debug, ex, message, data);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void Info(Exception ex, string message, params object[] data) => WriteLog(LogLevel.Info, ex, message, data);
+    public void Info(Exception ex, string message, params object[] data) =>
+        WriteLog(LogLevel.Info, ex, message, data);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void Warning(Exception ex, string message, params object[] data) => WriteLog(LogLevel.Warning, ex, message, data);
+    public void Warning(Exception ex, string message, params object[] data) =>
+        WriteLog(LogLevel.Warning, ex, message, data);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void Error(Exception ex, string message, params object[] data) => WriteLog(LogLevel.Error, ex, message, data);
+    public void Error(Exception ex, string message, params object[] data) =>
+        WriteLog(LogLevel.Error, ex, message, data);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void Critical(Exception ex, string message, params object[] data) => WriteLog(LogLevel.Critical, ex, message, data);
+    public void Critical(Exception ex, string message, params object[] data) =>
+        WriteLog(LogLevel.Critical, ex, message, data);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Trace(string message, params object[] data) => Trace(null, message, data);

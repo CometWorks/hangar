@@ -30,6 +30,7 @@ public class PluginConfig : IPluginConfig
     }
 
     private bool enabled = true;
+
     // TODO: Implement your config fields here
     // The default values here apply to the dedicated server plugin.
 

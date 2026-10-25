@@ -36,19 +36,25 @@ public sealed class HangarStorage
         if (PluginCluster.IsClusterProcess)
         {
             if (Config.HangarEntries?.Count > 0 || Config.Cooldowns?.Count > 0)
-                throw new InvalidDataException("Legacy Hangar entries and cooldowns must be migrated with their grid blobs before clustered use.");
+                throw new InvalidDataException(
+                    "Legacy Hangar entries and cooldowns must be migrated with their grid blobs before clustered use."
+                );
             clusterIndex = new ClusterHangarIndex(PluginStorage.GetSharedDirectory(PluginId));
         }
     }
 
     private PluginConfig Config => plugin.PluginConfig;
 
-    public string StorageRoot => clusterIndex?.Root ?? (string.IsNullOrWhiteSpace(Config.StorageRoot)
-        ? Plugin.DefaultStorageRoot
-        : Config.StorageRoot);
+    public string StorageRoot =>
+        clusterIndex?.Root
+        ?? (
+            string.IsNullOrWhiteSpace(Config.StorageRoot)
+                ? Plugin.DefaultStorageRoot
+                : Config.StorageRoot
+        );
 
-    public (int Entries, int Cooldowns) Counts => clusterIndex?.Counts()
-        ?? (Config.HangarEntries.Count, Config.Cooldowns.Count);
+    public (int Entries, int Cooldowns) Counts =>
+        clusterIndex?.Counts() ?? (Config.HangarEntries.Count, Config.Cooldowns.Count);
 
     public void EnsureStorage()
     {
@@ -59,8 +65,14 @@ public sealed class HangarStorage
     public IReadOnlyList<HangarEntry> ListPlayerEntries(ulong steamId)
     {
         return (clusterIndex?.Read(steamId).Entries ?? Config.HangarEntries)
-            .Where(entry => entry.Scope == HangarEntryScope.Player &&
-                            string.Equals(entry.OwnerId, steamId.ToString(CultureInfo.InvariantCulture), StringComparison.OrdinalIgnoreCase))
+            .Where(entry =>
+                entry.Scope == HangarEntryScope.Player
+                && string.Equals(
+                    entry.OwnerId,
+                    steamId.ToString(CultureInfo.InvariantCulture),
+                    StringComparison.OrdinalIgnoreCase
+                )
+            )
             .OrderBy(entry => ParseDate(entry.SavedUtc))
             .ToList();
     }
@@ -72,7 +84,8 @@ public sealed class HangarStorage
         MyCharacter character,
         string gridNameOrEntityId,
         out HangarEntry entry,
-        out string error)
+        out string error
+    )
     {
         entry = default;
         error = null;
@@ -100,7 +113,14 @@ public sealed class HangarStorage
         if (!CheckCooldown(steamId, lease?.State, out error))
             return false;
 
-        if (!GridFinder.TryFind(gridNameOrEntityId, character, Config.IncludeConnectedGrids, out var grids))
+        if (
+            !GridFinder.TryFind(
+                gridNameOrEntityId,
+                character,
+                Config.IncludeConnectedGrids,
+                out var grids
+            )
+        )
         {
             error = string.IsNullOrWhiteSpace(gridNameOrEntityId)
                 ? "No grid found in your line of sight."
@@ -131,20 +151,39 @@ public sealed class HangarStorage
 
         EnsureStorage();
         var id = Guid.NewGuid().ToString("N");
-        var relativePath = string.Join("/", BlobDirectoryName, steamId.ToString(CultureInfo.InvariantCulture), id + ".sbc");
+        var relativePath = string.Join(
+            "/",
+            BlobDirectoryName,
+            steamId.ToString(CultureInfo.InvariantCulture),
+            id + ".sbc"
+        );
         var absolutePath = Path.Combine(StorageRoot, relativePath);
-        var temporary = lease is null ? absolutePath : absolutePath + ".tmp-" + Guid.NewGuid().ToString("N");
+        var temporary = lease is null
+            ? absolutePath
+            : absolutePath + ".tmp-" + Guid.NewGuid().ToString("N");
         bool saved;
         try
         {
             saved = GridSerializer.Save(temporary, mainGrid.DisplayName, grids);
             if (saved && lease is not null)
             {
-                using (var file = new FileStream(temporary, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite)) file.Flush(true);
+                using (
+                    var file = new FileStream(
+                        temporary,
+                        FileMode.Open,
+                        FileAccess.ReadWrite,
+                        FileShare.ReadWrite
+                    )
+                )
+                    file.Flush(true);
                 File.Move(temporary, absolutePath);
             }
         }
-        finally { if (lease is not null) TryDelete(temporary); }
+        finally
+        {
+            if (lease is not null)
+                TryDelete(temporary);
+        }
         if (!saved)
         {
             error = "Failed to write grid data.";
@@ -166,12 +205,14 @@ public sealed class HangarStorage
             Blocks = blocks,
             GridCount = grids.Count,
             StaticGridCount = grids.Count(grid => grid.IsStatic),
-            LargeGridCount = grids.Count(grid => grid.GridSizeEnum == MyCubeSize.Large && !grid.IsStatic),
+            LargeGridCount = grids.Count(grid =>
+                grid.GridSizeEnum == MyCubeSize.Large && !grid.IsStatic
+            ),
             SmallGridCount = grids.Count(grid => grid.GridSizeEnum == MyCubeSize.Small),
             OriginalX = position.X,
             OriginalY = position.Y,
             OriginalZ = position.Z,
-            Description = ""
+            Description = "",
         };
 
         if (lease is not null)
@@ -204,7 +245,8 @@ public sealed class HangarStorage
         string selector,
         bool nearPlayer,
         out HangarEntry entry,
-        out string error)
+        out string error
+    )
     {
         entry = default;
         error = null;
@@ -253,14 +295,26 @@ public sealed class HangarStorage
             MyEntities.CreateFromObjectBuilderAndAdd(grid, true);
         }
 
-        if (lease is not null) { var id = entry.Id; lease.State.Entries.RemoveAll(e => e.Id == id); lease.Save(); }
-        else RemoveEntry(entry);
+        if (lease is not null)
+        {
+            var id = entry.Id;
+            lease.State.Entries.RemoveAll(e => e.Id == id);
+            lease.Save();
+        }
+        else
+            RemoveEntry(entry);
         TryDelete(absolutePath);
-        if (lease is null) plugin.SaveConfig();
+        if (lease is null)
+            plugin.SaveConfig();
         return true;
     }
 
-    public bool TryRemovePlayerEntry(ulong steamId, string selector, out HangarEntry entry, out string error)
+    public bool TryRemovePlayerEntry(
+        ulong steamId,
+        string selector,
+        out HangarEntry entry,
+        out string error
+    )
     {
         entry = default;
         error = null;
@@ -269,17 +323,24 @@ public sealed class HangarStorage
         if (!TryResolvePlayerEntry(steamId, selector, out entry, out error))
             return false;
 
-        if (lease is not null) { var id = entry.Id; lease.State.Entries.RemoveAll(e => e.Id == id); lease.Save(); }
-        else RemoveEntry(entry);
+        if (lease is not null)
+        {
+            var id = entry.Id;
+            lease.State.Entries.RemoveAll(e => e.Id == id);
+            lease.Save();
+        }
+        else
+            RemoveEntry(entry);
         TryDelete(GetAbsoluteBlobPath(entry));
-        if (lease is null) plugin.SaveConfig();
+        if (lease is null)
+            plugin.SaveConfig();
         return true;
     }
 
     public string Describe(HangarEntry entry, int index)
     {
-        return $"{index}. {entry.GridName} [{entry.Id.Substring(0, Math.Min(ShownIdLength, entry.Id.Length))}] " +
-               $"{entry.GridCount} grids, {entry.Blocks} blocks, {entry.Pcu} PCU, saved {FormatDate(entry.SavedUtc)}";
+        return $"{index}. {entry.GridName} [{entry.Id.Substring(0, Math.Min(ShownIdLength, entry.Id.Length))}] "
+            + $"{entry.GridCount} grids, {entry.Blocks} blocks, {entry.Pcu} PCU, saved {FormatDate(entry.SavedUtc)}";
     }
 
     public IEnumerable<string> DescribeDetails(HangarEntry entry)
@@ -296,7 +357,12 @@ public sealed class HangarStorage
         yield return $"original_position: {entry.OriginalX:0.##}, {entry.OriginalY:0.##}, {entry.OriginalZ:0.##}";
     }
 
-    public bool TryResolvePlayerEntry(ulong steamId, string selector, out HangarEntry entry, out string error)
+    public bool TryResolvePlayerEntry(
+        ulong steamId,
+        string selector,
+        out HangarEntry entry,
+        out string error
+    )
     {
         entry = default;
         error = null;
@@ -320,7 +386,12 @@ public sealed class HangarStorage
             return false;
         }
 
-        var isNumber = int.TryParse(selector, NumberStyles.Integer, CultureInfo.InvariantCulture, out var number);
+        var isNumber = int.TryParse(
+            selector,
+            NumberStyles.Integer,
+            CultureInfo.InvariantCulture,
+            out var number
+        );
         if (isNumber && number >= 1 && number <= entries.Count)
         {
             entry = entries[number - 1];
@@ -330,11 +401,15 @@ public sealed class HangarStorage
         // Any other number is an all-digit id as the list shows it, or a grid named exactly that.
         // Looser matching would let a mistyped list number pick, or remove, an unrelated entry.
         var matches = entries
-            .Where(e => isNumber
-                ? (selector.Length >= ShownIdLength && e.Id.StartsWith(selector, StringComparison.OrdinalIgnoreCase)) ||
-                  string.Equals(e.GridName, selector, StringComparison.OrdinalIgnoreCase)
-                : e.Id.StartsWith(selector, StringComparison.OrdinalIgnoreCase) ||
-                  e.GridName.IndexOf(selector, StringComparison.OrdinalIgnoreCase) >= 0)
+            .Where(e =>
+                isNumber
+                    ? (
+                        selector.Length >= ShownIdLength
+                        && e.Id.StartsWith(selector, StringComparison.OrdinalIgnoreCase)
+                    ) || string.Equals(e.GridName, selector, StringComparison.OrdinalIgnoreCase)
+                    : e.Id.StartsWith(selector, StringComparison.OrdinalIgnoreCase)
+                        || e.GridName.IndexOf(selector, StringComparison.OrdinalIgnoreCase) >= 0
+            )
             .ToList();
         if (matches.Count == 1)
         {
@@ -342,7 +417,8 @@ public sealed class HangarStorage
             return true;
         }
 
-        error = matches.Count > 1 ? $"Multiple hangar entries match '{selector}'. Use number or id."
+        error =
+            matches.Count > 1 ? $"Multiple hangar entries match '{selector}'. Use number or id."
             : isNumber ? $"No hangar entry #{number}."
             : $"No hangar entry matches '{selector}'.";
         return false;
@@ -355,10 +431,21 @@ public sealed class HangarStorage
             return true;
 
         var timestamp = state is null
-            ? Config.Cooldowns.FirstOrDefault(c => c.SteamId == steamId.ToString(CultureInfo.InvariantCulture)).LastSaveUtc
+            ? Config
+                .Cooldowns.FirstOrDefault(c =>
+                    c.SteamId == steamId.ToString(CultureInfo.InvariantCulture)
+                )
+                .LastSaveUtc
             : state.LastSaveUtc;
-        if (string.IsNullOrWhiteSpace(timestamp) ||
-            !DateTimeOffset.TryParse(timestamp, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var lastSave))
+        if (
+            string.IsNullOrWhiteSpace(timestamp)
+            || !DateTimeOffset.TryParse(
+                timestamp,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.RoundtripKind,
+                out var lastSave
+            )
+        )
             return true;
 
         var availableAt = lastSave.AddMinutes(Config.SaveCooldownMinutes);
@@ -374,7 +461,9 @@ public sealed class HangarStorage
     {
         var id = steamId.ToString(CultureInfo.InvariantCulture);
         Config.Cooldowns.RemoveAll(c => c.SteamId == id);
-        Config.Cooldowns.Add(new HangarCooldown { SteamId = id, LastSaveUtc = DateTimeOffset.UtcNow.ToString("O") });
+        Config.Cooldowns.Add(
+            new HangarCooldown { SteamId = id, LastSaveUtc = DateTimeOffset.UtcNow.ToString("O") }
+        );
         Config.NotifyChanged(nameof(Config.Cooldowns));
     }
 
@@ -389,21 +478,34 @@ public sealed class HangarStorage
         if (clusterIndex is not null)
         {
             var parts = entry.BlobPath?.Split('/');
-            if (parts?.Length != 3 || parts[0] != BlobDirectoryName
+            if (
+                parts?.Length != 3
+                || parts[0] != BlobDirectoryName
                 || !ulong.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out _)
                 || !Guid.TryParseExact(Path.GetFileNameWithoutExtension(parts[2]), "N", out _)
-                || Path.GetExtension(parts[2]) != ".sbc")
+                || Path.GetExtension(parts[2]) != ".sbc"
+            )
                 throw new InvalidDataException("Stored Hangar blob path is invalid.");
             return Path.Combine(StorageRoot, parts[0], parts[1], parts[2]);
         }
         return Path.IsPathRooted(entry.BlobPath)
             ? entry.BlobPath
-            : Path.Combine(new[] { StorageRoot }
-                .Concat(entry.BlobPath.Split(new[] { '/', '\\' }, StringSplitOptions.RemoveEmptyEntries))
-                .ToArray());
+            : Path.Combine(
+                new[] { StorageRoot }
+                    .Concat(
+                        entry.BlobPath.Split(
+                            new[] { '/', '\\' },
+                            StringSplitOptions.RemoveEmptyEntries
+                        )
+                    )
+                    .ToArray()
+            );
     }
 
-    private void MoveNearCharacter(IReadOnlyList<VRage.Game.MyObjectBuilder_CubeGrid> grids, MyCharacter character)
+    private void MoveNearCharacter(
+        IReadOnlyList<VRage.Game.MyObjectBuilder_CubeGrid> grids,
+        MyCharacter character
+    )
     {
         if (grids.Count == 0)
             return;
@@ -430,10 +532,17 @@ public sealed class HangarStorage
 
         var bounds = BoundingBoxD.CreateInvalid();
         foreach (var grid in grids)
-            bounds.Include(((BoundingBoxD)grid.CalculateBoundingBox()).TransformFast(WorldMatrix(grid)));
+            bounds.Include(
+                ((BoundingBoxD)grid.CalculateBoundingBox()).TransformFast(WorldMatrix(grid))
+            );
 
         var sphere = BoundingSphereD.CreateFromBoundingBox(bounds);
-        var free = MyEntities.FindFreePlaceCustom(sphere.Center, (float)sphere.Radius, maxTestCount: 50, testsPerDistance: 10);
+        var free = MyEntities.FindFreePlaceCustom(
+            sphere.Center,
+            (float)sphere.Radius,
+            maxTestCount: 50,
+            testsPerDistance: 10
+        );
         if (free == null)
             return false;
 
@@ -460,8 +569,13 @@ public sealed class HangarStorage
         HkShape shape = new HkBoxShape(Vector3.Max(box.HalfExtents - 0.25f, new Vector3(0.05f)));
         try
         {
-            return MyEntities.IsShapePenetrating(shape, ref center, ref rotation,
-                entity => entity is MyVoxelBase || entity is MyFloatingObject, allowSafezones: true);
+            return MyEntities.IsShapePenetrating(
+                shape,
+                ref center,
+                ref rotation,
+                entity => entity is MyVoxelBase || entity is MyFloatingObject,
+                allowSafezones: true
+            );
         }
         finally
         {
@@ -498,7 +612,9 @@ public sealed class HangarStorage
     private static HangarGridKind GetKind(IReadOnlyCollection<MyCubeGrid> grids)
     {
         var staticCount = grids.Count(grid => grid.IsStatic);
-        var largeCount = grids.Count(grid => grid.GridSizeEnum == MyCubeSize.Large && !grid.IsStatic);
+        var largeCount = grids.Count(grid =>
+            grid.GridSizeEnum == MyCubeSize.Large && !grid.IsStatic
+        );
         var smallCount = grids.Count(grid => grid.GridSizeEnum == MyCubeSize.Small);
         if (staticCount == grids.Count)
             return HangarGridKind.Static;
@@ -511,7 +627,12 @@ public sealed class HangarStorage
 
     private static DateTimeOffset ParseDate(string value)
     {
-        return DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var result)
+        return DateTimeOffset.TryParse(
+            value,
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.RoundtripKind,
+            out var result
+        )
             ? result
             : DateTimeOffset.MinValue;
     }
