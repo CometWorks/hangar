@@ -15,12 +15,17 @@ public static class GridSerializer
 {
     public static bool Save(string path, string blueprintName, IEnumerable<MyCubeGrid> grids)
     {
-        var definition = MyObjectBuilderSerializerKeen.CreateNewObject<MyObjectBuilder_ShipBlueprintDefinition>();
-        definition.Id = new MyDefinitionId(new MyObjectBuilderType(typeof(MyObjectBuilder_ShipBlueprintDefinition)), blueprintName);
+        var definition =
+            MyObjectBuilderSerializerKeen.CreateNewObject<MyObjectBuilder_ShipBlueprintDefinition>();
+        definition.Id = new MyDefinitionId(
+            new MyObjectBuilderType(typeof(MyObjectBuilder_ShipBlueprintDefinition)),
+            blueprintName
+        );
         definition.CubeGrids = grids.Select(GetObjectBuilder).ToArray();
         SanitizeStoredProjectorBlueprints(definition.CubeGrids);
 
-        var definitions = MyObjectBuilderSerializerKeen.CreateNewObject<MyObjectBuilder_Definitions>();
+        var definitions =
+            MyObjectBuilderSerializerKeen.CreateNewObject<MyObjectBuilder_Definitions>();
         definitions.ShipBlueprints = new[] { definition };
 
         Directory.CreateDirectory(Path.GetDirectoryName(path) ?? ".");
@@ -33,7 +38,12 @@ public static class GridSerializer
         if (!File.Exists(path))
             return false;
 
-        if (!MyObjectBuilderSerializerKeen.DeserializeXML(path, out MyObjectBuilder_Definitions definitions))
+        if (
+            !MyObjectBuilderSerializerKeen.DeserializeXML(
+                path,
+                out MyObjectBuilder_Definitions definitions
+            )
+        )
             return false;
 
         if (definitions.ShipBlueprints != null)
@@ -63,7 +73,10 @@ public static class GridSerializer
         return grids.Count > 0;
     }
 
-    public static void TransferOwnership(IEnumerable<MyObjectBuilder_CubeGrid> grids, long identityId)
+    public static void TransferOwnership(
+        IEnumerable<MyObjectBuilder_CubeGrid> grids,
+        long identityId
+    )
     {
         foreach (var grid in grids)
         {
@@ -79,12 +92,16 @@ public static class GridSerializer
     {
         RemovePilots(grid);
         if (grid.GetObjectBuilder() is not MyObjectBuilder_CubeGrid objectBuilder)
-            throw new InvalidOperationException($"{grid.DisplayName} did not produce a cube-grid object builder.");
+            throw new InvalidOperationException(
+                $"{grid.DisplayName} did not produce a cube-grid object builder."
+            );
 
         return objectBuilder;
     }
 
-    private static void SanitizeStoredProjectorBlueprints(IEnumerable<MyObjectBuilder_CubeGrid> grids)
+    private static void SanitizeStoredProjectorBlueprints(
+        IEnumerable<MyObjectBuilder_CubeGrid> grids
+    )
     {
         var visited = new HashSet<MyObjectBuilder_CubeGrid>();
         foreach (var grid in grids)
@@ -99,7 +116,8 @@ public static class GridSerializer
 
     private static void SanitizeProjectorBlueprint(
         MyObjectBuilder_Projector projector,
-        HashSet<MyObjectBuilder_CubeGrid> visited)
+        HashSet<MyObjectBuilder_CubeGrid> visited
+    )
     {
         if (projector.ProjectedGrids != null)
         {
@@ -113,9 +131,14 @@ public static class GridSerializer
 
     private static void SanitizeProjectedGrid(
         MyObjectBuilder_CubeGrid projectedGrid,
-        HashSet<MyObjectBuilder_CubeGrid> visited)
+        HashSet<MyObjectBuilder_CubeGrid> visited
+    )
     {
-        if (projectedGrid == null || !visited.Add(projectedGrid) || projectedGrid.CubeBlocks == null)
+        if (
+            projectedGrid == null
+            || !visited.Add(projectedGrid)
+            || projectedGrid.CubeBlocks == null
+        )
             return;
 
         foreach (var cubeBlock in projectedGrid.CubeBlocks)
@@ -124,7 +147,8 @@ public static class GridSerializer
                 continue;
 
             if (cubeBlock.ConstructionStockpile != null)
-                cubeBlock.ConstructionStockpile.Items = Array.Empty<MyObjectBuilder_StockpileItem>();
+                cubeBlock.ConstructionStockpile.Items =
+                    Array.Empty<MyObjectBuilder_StockpileItem>();
 
             if (cubeBlock is MyObjectBuilder_Projector nestedProjector)
                 SanitizeProjectorBlueprint(nestedProjector, visited);

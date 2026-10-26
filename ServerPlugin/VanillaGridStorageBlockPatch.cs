@@ -63,7 +63,7 @@ public static class VanillaGridStorageRpcBlockPatch
         "ConfirmDeployEndpoint",
         "ExpediteCurrentClientOrderEndpoint",
         "StoreGridTrusted",
-        "RetrieveGridTrusted"
+        "RetrieveGridTrusted",
     ];
 
     public static IEnumerable<MethodBase> TargetMethods()
@@ -87,10 +87,16 @@ public static class VanillaGridStorageRpcBlockPatch
         switch (__originalMethod.Name)
         {
             case "StoreGridTrusted":
-                __instance.OnGridStorageDepositRequestFinished(MyGridStorageRequestResult.UnspecifiedStorageIssue, endpoint);
+                __instance.OnGridStorageDepositRequestFinished(
+                    MyGridStorageRequestResult.UnspecifiedStorageIssue,
+                    endpoint
+                );
                 break;
             case "RetrieveGridTrusted":
-                __instance.OnGridStorageRetrievalRequestFinished(MyGridStorageRequestResult.UnspecifiedStorageIssue, endpoint);
+                __instance.OnGridStorageRetrievalRequestFinished(
+                    MyGridStorageRequestResult.UnspecifiedStorageIssue,
+                    endpoint
+                );
                 break;
         }
 
@@ -98,13 +104,17 @@ public static class VanillaGridStorageRpcBlockPatch
     }
 }
 
-[HarmonyPatch(typeof(MyGridsStorageSessionComponent), nameof(MyGridsStorageSessionComponent.StoreGrid))]
+[HarmonyPatch(
+    typeof(MyGridsStorageSessionComponent),
+    nameof(MyGridsStorageSessionComponent.StoreGrid)
+)]
 public static class VanillaGridStorageSessionStoreBlockPatch
 {
     public static bool Prefix(
         IMyGridStorageProxy callerEntity,
         ulong? callerEndpointId,
-        Action<MyGridStorageRequestResult> callback)
+        Action<MyGridStorageRequestResult> callback
+    )
     {
         if (!VanillaGridStorageBlock.Enabled)
             return true;
@@ -113,18 +123,25 @@ public static class VanillaGridStorageSessionStoreBlockPatch
             VanillaGridStorageBlock.NotifyCaller(callerEndpointId.Value);
 
         callback?.Invoke(MyGridStorageRequestResult.UnspecifiedStorageIssue);
-        callerEntity?.OnGridStorageDepositRequestFinished(MyGridStorageRequestResult.UnspecifiedStorageIssue, callerEndpointId);
+        callerEntity?.OnGridStorageDepositRequestFinished(
+            MyGridStorageRequestResult.UnspecifiedStorageIssue,
+            callerEndpointId
+        );
         return false;
     }
 }
 
-[HarmonyPatch(typeof(MyGridsStorageSessionComponent), nameof(MyGridsStorageSessionComponent.RetrieveGrid))]
+[HarmonyPatch(
+    typeof(MyGridsStorageSessionComponent),
+    nameof(MyGridsStorageSessionComponent.RetrieveGrid)
+)]
 public static class VanillaGridStorageSessionRetrieveBlockPatch
 {
     public static bool Prefix(
         IMyGridStorageProxy callerEntity,
         ulong? callerEndpointId,
-        Action<MyGridStorageRequestResult> callback)
+        Action<MyGridStorageRequestResult> callback
+    )
     {
         if (!VanillaGridStorageBlock.Enabled)
             return true;
@@ -133,12 +150,18 @@ public static class VanillaGridStorageSessionRetrieveBlockPatch
             VanillaGridStorageBlock.NotifyCaller(callerEndpointId.Value);
 
         callback?.Invoke(MyGridStorageRequestResult.UnspecifiedStorageIssue);
-        callerEntity?.OnGridStorageRetrievalRequestFinished(MyGridStorageRequestResult.UnspecifiedStorageIssue, callerEndpointId);
+        callerEntity?.OnGridStorageRetrievalRequestFinished(
+            MyGridStorageRequestResult.UnspecifiedStorageIssue,
+            callerEndpointId
+        );
         return false;
     }
 }
 
-[HarmonyPatch(typeof(MyGridsStorageSessionComponent), nameof(MyGridsStorageSessionComponent.DeleteGrid))]
+[HarmonyPatch(
+    typeof(MyGridsStorageSessionComponent),
+    nameof(MyGridsStorageSessionComponent.DeleteGrid)
+)]
 public static class VanillaGridStorageSessionDeleteBlockPatch
 {
     public static bool Prefix(ref bool __result)
@@ -151,7 +174,10 @@ public static class VanillaGridStorageSessionDeleteBlockPatch
     }
 }
 
-[HarmonyPatch(typeof(MyGridsStorageSessionComponent), nameof(MyGridsStorageSessionComponent.EnqueueOrder))]
+[HarmonyPatch(
+    typeof(MyGridsStorageSessionComponent),
+    nameof(MyGridsStorageSessionComponent.EnqueueOrder)
+)]
 public static class VanillaGridStorageSessionOrderBlockPatch
 {
     public static bool Prefix()
@@ -160,7 +186,10 @@ public static class VanillaGridStorageSessionOrderBlockPatch
     }
 }
 
-[HarmonyPatch(typeof(MyGridsStorageSessionComponent), nameof(MyGridsStorageSessionComponent.ConfirmDeploy))]
+[HarmonyPatch(
+    typeof(MyGridsStorageSessionComponent),
+    nameof(MyGridsStorageSessionComponent.ConfirmDeploy)
+)]
 public static class VanillaGridStorageSessionDeployBlockPatch
 {
     public static bool Prefix(ref bool __result)

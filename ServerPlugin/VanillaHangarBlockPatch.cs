@@ -28,8 +28,11 @@ public static class VanillaHangarBlockPatch
             if (!TryGetRoot(msg.Text, out var root))
                 return true;
 
-            if (!config.BlockedHangarCommandRoots.Any(blocked =>
-                    string.Equals(blocked?.Trim(), root, StringComparison.OrdinalIgnoreCase)))
+            if (
+                !config.BlockedHangarCommandRoots.Any(blocked =>
+                    string.Equals(blocked?.Trim(), root, StringComparison.OrdinalIgnoreCase)
+                )
+            )
                 return true;
 
             RespondBlocked(msg);
@@ -74,6 +77,7 @@ public static class VanillaHangarBlockPatch
         MyVisualScriptLogicProvider.SendChatMessage(
             "Vanilla hangar commands are disabled. Use !hangar.",
             Plugin.PluginName,
-            identityId);
+            identityId
+        );
     }
 }

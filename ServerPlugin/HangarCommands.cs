@@ -41,7 +41,15 @@ public abstract class HangarCommandModule : CommandModule
         if (!TryGetPlugin(out var plugin, out var error))
             return error;
 
-        if (!TryGetCharacter(out var steamId, out var identityId, out var callerName, out var character, out error))
+        if (
+            !TryGetCharacter(
+                out var steamId,
+                out var identityId,
+                out var callerName,
+                out var character,
+                out error
+            )
+        )
             return error;
 
         return plugin.Storage.TrySavePlayerGrid(
@@ -51,7 +59,8 @@ public abstract class HangarCommandModule : CommandModule
             character,
             gridNameOrEntityId,
             out var entry,
-            out error)
+            out error
+        )
             ? $"Saved {entry.GridName} to hangar as {entry.Id.Substring(0, HangarStorage.ShownIdLength)}."
             : error;
     }
@@ -87,7 +96,8 @@ public abstract class HangarCommandModule : CommandModule
             selector,
             nearPlayer,
             out var entry,
-            out error)
+            out error
+        )
             ? $"Loaded {entry.GridName} from hangar."
             : error;
     }
@@ -158,7 +168,12 @@ public abstract class HangarCommandModule : CommandModule
         return true;
     }
 
-    private bool TryGetPlayerCaller(out ulong steamId, out long identityId, out string callerName, out string error)
+    private bool TryGetPlayerCaller(
+        out ulong steamId,
+        out long identityId,
+        out string callerName,
+        out string error
+    )
     {
         steamId = 0;
         identityId = 0;
@@ -177,16 +192,24 @@ public abstract class HangarCommandModule : CommandModule
         return true;
     }
 
-    private bool TryGetCharacter(out ulong steamId, out long identityId, out string callerName, out MyCharacter character, out string error)
+    private bool TryGetCharacter(
+        out ulong steamId,
+        out long identityId,
+        out string callerName,
+        out MyCharacter character,
+        out string error
+    )
     {
         character = null;
         if (!TryGetPlayerCaller(out steamId, out identityId, out callerName, out error))
             return false;
 
         var caller = Context.Caller;
-        if (MySession.Static?.Players == null ||
-            !MySession.Static.Players.TryGetPlayerBySteamId(caller.SteamId, out var player) ||
-            player?.Character == null)
+        if (
+            MySession.Static?.Players == null
+            || !MySession.Static.Players.TryGetPlayerBySteamId(caller.SteamId, out var player)
+            || player?.Character == null
+        )
         {
             error = "Player character not found.";
             return false;
@@ -216,11 +239,13 @@ public sealed class HangarCommands : HangarCommandModule
 
     [Command("info", "Shows one stored grid")]
     [Permission(MyPromoteLevel.None)]
-    public IEnumerable<string> Info(params string[] selector) => EntryInfo(string.Join(" ", selector));
+    public IEnumerable<string> Info(params string[] selector) =>
+        EntryInfo(string.Join(" ", selector));
 
     [Command("save", "Saves the looked-at grid or a named grid")]
     [Permission(MyPromoteLevel.None)]
-    public string Save(params string[] gridNameOrEntityId) => SaveEntry(string.Join(" ", gridNameOrEntityId ?? Array.Empty<string>()));
+    public string Save(params string[] gridNameOrEntityId) =>
+        SaveEntry(string.Join(" ", gridNameOrEntityId ?? Array.Empty<string>()));
 
     [Command("load", "Loads one stored grid. Add true to force near-player placement")]
     [Permission(MyPromoteLevel.None)]
@@ -260,11 +285,13 @@ public sealed class HangarShortCommands : HangarCommandModule
 
     [Command("info", "Shows one stored grid")]
     [Permission(MyPromoteLevel.None)]
-    public IEnumerable<string> Info(params string[] selector) => EntryInfo(string.Join(" ", selector));
+    public IEnumerable<string> Info(params string[] selector) =>
+        EntryInfo(string.Join(" ", selector));
 
     [Command("save", "Saves the looked-at grid or a named grid")]
     [Permission(MyPromoteLevel.None)]
-    public string Save(params string[] gridNameOrEntityId) => SaveEntry(string.Join(" ", gridNameOrEntityId ?? Array.Empty<string>()));
+    public string Save(params string[] gridNameOrEntityId) =>
+        SaveEntry(string.Join(" ", gridNameOrEntityId ?? Array.Empty<string>()));
 
     [Command("load", "Loads one stored grid. Add true to force near-player placement")]
     [Permission(MyPromoteLevel.None)]
