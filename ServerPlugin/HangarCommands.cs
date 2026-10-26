@@ -83,7 +83,12 @@ public abstract class HangarCommandModule : CommandModule
             return error;
 
         MyCharacter character = null;
-        if (nearPlayer || plugin.PluginConfig.DefaultLoadMode == HangarLoadMode.NearPlayer)
+        var config = plugin.PluginConfig;
+        if (
+            nearPlayer
+            || config.DefaultLoadMode == HangarLoadMode.NearPlayer
+            || config.AdminSafeZonesOnly
+        )
         {
             if (!TryGetCharacter(out _, out _, out _, out character, out error))
                 return error;
@@ -131,6 +136,7 @@ public abstract class HangarCommandModule : CommandModule
             $"include_connected_grids: {config.IncludeConnectedGrids}",
             $"remove_original_on_save: {config.RemoveOriginalOnSave}",
             $"default_load_mode: {config.DefaultLoadMode}",
+            $"admin_safe_zones_only: {config.AdminSafeZonesOnly}",
             $"block_vanilla_grid_storage: {config.BlockVanillaGridStorage}",
             $"block_vanilla_hangar_commands: {config.BlockVanillaHangarCommands}",
             $"blocked_hangar_roots: {string.Join(", ", config.BlockedHangarCommandRoots)}",

@@ -8,14 +8,17 @@ using System.Reflection;
 using System.Xml.Linq;
 using HarmonyLib;
 using PluginSdk.Commands;
+using Sandbox.Common.ObjectBuilders;
 using Sandbox.Engine.Multiplayer;
 using Sandbox.Game.Entities;
 using Sandbox.Game.Entities.Blocks;
 using Sandbox.Game.Entities.Cube;
 using Sandbox.Game.World;
+using VRage;
 using VRage.Game;
 using VRage.Game.Entity;
 using VRage.Game.ModAPI;
+using VRage.Game.ObjectBuilders.Components;
 using VRage.ObjectBuilders;
 using VRage.Plugins;
 using VRageMath;
@@ -353,6 +356,68 @@ public sealed class ProbeCommands : CommandModule
             .GetMethod("OnTeleport", Any)
             .Invoke(null, new object[] { steamId, new Vector3D(x, y, z) });
         return "Probe teleport: done";
+    }
+
+    private static readonly List<MyEntity> Zones = new List<MyEntity>();
+    private static string lastLoad = "none";
+
+    [Command("zone", "Makes an admin safe zone of this name, a sphere that allows everything.")]
+    [Permission(MyPromoteLevel.Admin)]
+    public string Zone(string name, double x, double y, double z, float radius)
+    {
+        var zone = new MyObjectBuilder_SafeZone
+        {
+            PositionAndOrientation = new MyPositionAndOrientation(
+                MatrixD.CreateTranslation(new Vector3D(x, y, z))
+            ),
+            PersistentFlags = MyPersistentEntityFlags2.InScene,
+            Shape = MySafeZoneShape.Sphere,
+            Radius = radius,
+            Enabled = true,
+            AllowedActions = MySafeZoneAction.All,
+            // The default, a whitelist, would keep everyone out
+            AccessTypePlayers = MySafeZoneAccess.Blacklist,
+            AccessTypeFactions = MySafeZoneAccess.Blacklist,
+            AccessTypeGrids = MySafeZoneAccess.Blacklist,
+            AccessTypeFloatingObjects = MySafeZoneAccess.Blacklist,
+            Name = name,
+            DisplayName = name,
+        };
+        Zones.Add(MyEntities.CreateFromObjectBuilderAndAdd(zone, false));
+        return "Probe zone: done";
+    }
+
+    [Command("unzone", "Removes the safe zones the probe made.")]
+    [Permission(MyPromoteLevel.Admin)]
+    public string Unzone()
+    {
+        foreach (MyEntity zone in Zones)
+            MySessionComponentSafeZones.RemoveSafeZone((MySafeZone)zone);
+        Zones.Clear();
+        return "Probe unzone: done";
+    }
+
+    // refuse: the hook refuses every load; allow: it lets them through; off: no hook. Both
+    // record the last call, which `hook last` shows.
+    [Command("hook", "Sets Hangar's BeforeLoad hook: refuse, allow, off or last.")]
+    [Permission(MyPromoteLevel.Admin)]
+    public string Hook(string mode)
+    {
+        if (mode == "last")
+            return "Probe hook: " + lastLoad;
+
+        Func<long, string, string, int, string> hook = (identity, saved, here, pcu) =>
+        {
+            lastLoad = $"saved={saved}|here={here}|pcu={pcu}";
+            return mode == "refuse" ? "Probe refuses: " + lastLoad : null;
+        };
+        lastLoad = "none";
+        Plugin
+            .GetType()
+            .Assembly.GetType("ServerPlugin.HangarHooks")
+            .GetField("BeforeLoad")
+            .SetValue(null, mode == "off" ? null : hook);
+        return "Probe hook: " + mode;
     }
 
     [Command("patched", "The game methods Hangar's Harmony patches are on.")]
