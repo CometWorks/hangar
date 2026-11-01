@@ -138,3 +138,84 @@ def test_before_load_hook_without_zones(game):
     assert a.hangar("load") == "Loaded Hook no zone from hangar."
     last = a.probe("hook", "last")
     assert last.startswith("Probe hook: saved=|here=|pcu="), last
+
+
+def store(game, name: str, point) -> str:
+    return game.a.probe("store", f'"{name}"', game.a.steam_id, *point)
+
+
+STORED = "Probe store: stored=True|full=False|error="
+
+
+def test_store_hook_is_not_held_to_the_players_rules(game):
+    """Outside any zone and not the player's grid: it goes in, recorded at the zone the
+    caller names"""
+    a, b = game.a, game.b
+    game.configure(AdminSafeZonesOnly=True, SaveCooldownMinutes=60)
+    game.paste("Store hook")
+    a.probe("own", '"Store hook"', b.identity_id, world.SHIP_BLOCKS)
+    zone(game, "Zone A", game.at(*ZONE_B))
+    assert store(game, "Store hook", game.at(*ZONE_B)) == STORED
+    assert game.grid("Store hook")["count"] == 0
+    assert info(game)["zone"] == "Zone A"
+
+
+def test_store_hook_with_no_zone_there(game):
+    game.paste("Store far")
+    assert store(game, "Store far", game.site) == STORED
+    assert info(game)["zone"] == ""
+
+
+def test_store_hook_does_not_start_the_cooldown(game):
+    a = game.a
+    game.configure(SaveCooldownMinutes=60)
+    game.paste("Store cool", offset=(0.0, 0.0, -45.0))
+    game.paste("Save cool", offset=(0.0, 0.0, -60.0))
+    assert store(game, "Store cool", game.site) == STORED
+    assert saved_id(a.hangar("save Save cool"))
+
+
+def test_store_hook_goes_past_a_running_cooldown(game):
+    a = game.a
+    game.configure(SaveCooldownMinutes=60)
+    game.paste("Save first", offset=(0.0, 0.0, -45.0))
+    game.paste("Store next", offset=(0.0, 0.0, -60.0))
+    assert saved_id(a.hangar("save Save first"))
+    assert store(game, "Store next", game.site) == STORED
+    assert len(a.hangar("list").splitlines()) == 2
+
+
+def test_store_hook_removes_the_grid_whatever_the_config(game):
+    game.configure(RemoveOriginalOnSave=False)
+    game.paste("Store gone")
+    assert store(game, "Store gone", game.site) == STORED
+    assert game.grid("Store gone")["count"] == 0
+
+
+def test_store_hook_says_when_there_is_no_slot(game):
+    a = game.a
+    game.configure(MaxEntriesPerPlayer=1)
+    game.paste("Slot taken", offset=(0.0, 0.0, -45.0))
+    game.paste("No slot", offset=(0.0, 0.0, -60.0))
+    assert saved_id(a.hangar("save Slot taken"))
+    assert store(game, "No slot", game.site) == (
+        "Probe store: stored=False|full=True|error=Hangar is full. Limit: 1."
+    )
+    assert game.grid("No slot")["count"] == 1
+    assert len(a.hangar("list").splitlines()) == 1
+
+
+def test_store_hook_keeps_entry_limits_and_the_switch(game):
+    game.configure(MaxBlocksPerEntry=1)
+    game.paste("Too big")
+    reply = store(game, "Too big", game.site)
+    assert reply.startswith(
+        "Probe store: stored=False|full=False|error=Grid is too large"
+    ), reply
+    assert game.grid("Too big")["count"] == 1
+
+    game.configure(Enabled=False)
+    assert store(game, "Too big", game.site) == (
+        "Probe store: stored=False|full=False|error=Hangar is disabled."
+    )
+    assert game.grid("Too big")["count"] == 1
