@@ -123,6 +123,8 @@ class Game:
                 "blocks": int(values["blocks"]),
                 "static": values["static"] == "True",
                 "pos": tuple(float(v) for v in values["pos"].split(",")),
+                "center": tuple(float(v) for v in values["center"].split(",")),
+                "radius": float(values["radius"]),
                 "group": int(values["group"]),
                 "groupblocks": int(values["groupblocks"]),
                 "owners": {

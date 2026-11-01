@@ -61,6 +61,36 @@ def test_hangar_and_config_survive_a_restart(game):
     assert b.hangar("load") == "Loaded Kept B from hangar."
 
 
+def test_a_config_from_before_the_options_behaves_the_same(game):
+    """A server that upgrades: its Hangar.cfg names neither of the two new options"""
+    game.configure(DefaultLoadMode="OriginalPosition", LoadOffsetMeters=40)
+    for client in (game.a.client, game.b.client):
+        client.stop()
+    game.server.stop()
+    text = game.stored()
+    for option in ("PlayersMayChooseLoadPlace", "LoadClearOfGridSpheres"):
+        text, count = re.subn(rf"\s*<{option}>[^<]*</{option}>", "", text)
+        assert count == 1, option
+    game.server.plugin_cfg.write_text(text, encoding="utf-8")
+    game.server.start()
+    game.restart_clients()
+    game.go_to_site()
+
+    a = game.a
+    status = dict(line.split(": ", 1) for line in a.hangar("status").splitlines())
+    assert status["default_load_mode"] == "OriginalPosition"
+    assert status["players_may_choose_load_place"] == "True"
+    assert status["load_clear_of_grid_spheres"] == "False"
+    game.paste("From before")
+    origin = game.grid("From before")["pos"]
+    saved_id(a.hangar("save From before"))
+    assert a.hangar("load") == "Loaded From before from hangar."
+    assert distance(game.grid("From before")["pos"], origin) < 0.5
+    saved_id(a.hangar("save From before"))
+    assert a.hangar("load 1 true") == "Loaded From before from hangar."
+    assert distance(game.grid("From before")["pos"], a.position()) < 45
+
+
 def test_broken_config_keeps_hangar_unloaded(game):
     """Hangar.cfg holds the standalone index of stored grids, so Hangar must
     not start over with an empty one. It fails to load instead and leaves the

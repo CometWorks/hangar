@@ -17,8 +17,8 @@ using VRage.Plugins;
 #if !LOCAL_BUILD
 using System.Reflection;
 
-[assembly: AssemblyVersion("1.1.0.0")]
-[assembly: AssemblyFileVersion("1.1.0.0")]
+[assembly: AssemblyVersion("1.2.0.0")]
+[assembly: AssemblyFileVersion("1.2.0.0")]
 
 #endif
 
@@ -101,6 +101,7 @@ public class Plugin : IPlugin, ICommonPlugin
             if (_initialized)
             {
                 Log.Debug("Disposing");
+                GridSpheres.Dispose();
                 if (_config != null)
                 {
                     _config.PropertyChanged -= ConfigChanged;
@@ -171,6 +172,7 @@ public class Plugin : IPlugin, ICommonPlugin
             return;
 
         PatchHelpers.PatchUpdates();
+        GridSpheres.Update(Tick, HangarStorage.PluginId);
     }
 
     private void ConfigChanged(object sender, PropertyChangedEventArgs e)

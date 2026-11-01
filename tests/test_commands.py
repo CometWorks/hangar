@@ -185,6 +185,8 @@ def test_status(game):
         "include_connected_grids": "True",
         "remove_original_on_save": "True",
         "default_load_mode": "NearPlayer",
+        "players_may_choose_load_place": "True",
+        "load_clear_of_grid_spheres": "False",
         "admin_safe_zones_only": "False",
         "block_vanilla_grid_storage": "True",
         "block_vanilla_hangar_commands": "True",

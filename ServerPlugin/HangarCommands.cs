@@ -5,6 +5,7 @@ using PluginSdk.Commands;
 using Sandbox.Game.Entities.Character;
 using Sandbox.Game.World;
 using VRage.Game.ModAPI;
+using VRageMath;
 
 namespace ServerPlugin;
 
@@ -79,7 +80,57 @@ public abstract class HangarCommandModule : CommandModule
     {
         if (!TryGetPlugin(out var plugin, out var error))
             return error;
-        if (!TryGetPlayerCaller(out var steamId, out var identityId, out _, out error))
+
+        var config = plugin.PluginConfig;
+        if (nearPlayer && !config.PlayersMayChooseLoadPlace)
+            return "On this server players can't choose where a grid comes back.";
+
+        if (
+            nearPlayer
+            || config.DefaultLoadMode != HangarLoadMode.OriginalPosition
+            || !config.LoadClearOfGridSpheres
+            || config.AdminSafeZonesOnly
+        )
+            return LoadEntry(plugin, selector, nearPlayer, null);
+
+        if (!TryGetPlayerCaller(out var steamId, out _, out _, out error))
+            return error;
+        if (!plugin.Storage.TryResolvePlayerEntry(steamId, selector, out var entry, out error))
+            return error;
+
+        var context = Context;
+        GridSpheres.Around(
+            HangarStorage.PluginId,
+            new Vector3D(entry.OriginalX, entry.OriginalY, entry.OriginalZ),
+            HangarStorage.FreeSpotReach * 2,
+            spheres =>
+            {
+                try
+                {
+                    context.Respond(
+                        spheres == null
+                            ? "Can't see what is at that spot right now. Try again in a moment."
+                            : LoadEntry(plugin, selector, false, spheres)
+                    );
+                }
+                catch (Exception exception)
+                {
+                    plugin.Log.Error(exception, "Hangar load failed");
+                    context.Respond("Hangar load failed.");
+                }
+            }
+        );
+        return null;
+    }
+
+    private string LoadEntry(
+        Plugin plugin,
+        string selector,
+        bool nearPlayer,
+        IReadOnlyList<BoundingSphereD> spheres
+    )
+    {
+        if (!TryGetPlayerCaller(out var steamId, out var identityId, out _, out var error))
             return error;
 
         MyCharacter character = null;
@@ -94,17 +145,24 @@ public abstract class HangarCommandModule : CommandModule
                 return error;
         }
 
-        return plugin.Storage.TryLoadPlayerGrid(
-            steamId,
-            identityId,
-            character,
-            selector,
-            nearPlayer,
-            out var entry,
-            out error
+        if (
+            !plugin.Storage.TryLoadPlayerGrid(
+                steamId,
+                identityId,
+                character,
+                selector,
+                nearPlayer,
+                spheres,
+                out var entry,
+                out var moved,
+                out error
+            )
         )
-            ? $"Loaded {entry.GridName} from hangar."
-            : error;
+            return error;
+
+        return moved > 0
+            ? $"Loaded {entry.GridName} from hangar, {moved:0} m from where it was saved as that spot is taken."
+            : $"Loaded {entry.GridName} from hangar.";
     }
 
     protected string RemoveEntry(string selector, string[] more)
@@ -136,6 +194,8 @@ public abstract class HangarCommandModule : CommandModule
             $"include_connected_grids: {config.IncludeConnectedGrids}",
             $"remove_original_on_save: {config.RemoveOriginalOnSave}",
             $"default_load_mode: {config.DefaultLoadMode}",
+            $"players_may_choose_load_place: {config.PlayersMayChooseLoadPlace}",
+            $"load_clear_of_grid_spheres: {config.LoadClearOfGridSpheres}",
             $"admin_safe_zones_only: {config.AdminSafeZonesOnly}",
             $"block_vanilla_grid_storage: {config.BlockVanillaGridStorage}",
             $"block_vanilla_hangar_commands: {config.BlockVanillaHangarCommands}",

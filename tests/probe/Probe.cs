@@ -212,7 +212,47 @@ public sealed class ProbeCommands : CommandModule
         int pilots = fat.OfType<MyShipController>().Count(c => c.Pilot != null);
         return $"Probe grid: count={grids.Count} id={grid.EntityId} blocks={grid.BlocksCount} "
             + $"static={grid.IsStatic} pos={V(grid.PositionComp.GetPosition())} "
+            + $"center={V(grid.PositionComp.WorldVolume.Center)} radius={F(grid.PositionComp.WorldVolume.Radius)} "
             + $"group={group.Count} groupblocks={group.Sum(g => g.BlocksCount)} owners={owners} pilots={pilots}";
+    }
+
+    [Command(
+        "clearspots",
+        "Random spheres far out in the world through Hangar's free spot search: how many cases, and how many came out inside a sphere."
+    )]
+    [Permission(MyPromoteLevel.Admin)]
+    public string ClearSpots(int cases)
+    {
+        MethodInfo search = Plugin
+            .GetType()
+            .Assembly.GetType("ServerPlugin.GridSpheres", true)
+            .GetMethod("ClearSpots", Any);
+        var random = new Random(930);
+        double Next(double range) => (random.NextDouble() * 2 - 1) * range;
+        int bad = 0;
+        for (int i = 0; i < cases; i++)
+        {
+            var center = new Vector3D(Next(5e6), Next(5e6), Next(5e6));
+            var ship = new BoundingSphereD(center, 1 + random.NextDouble() * 50);
+            var others = Enumerable
+                .Range(0, 1 + random.Next(30))
+                .Select(_ => new BoundingSphereD(
+                    center + new Vector3D(Next(300), Next(300), Next(300)),
+                    1 + random.NextDouble() * 300
+                ))
+                .ToList();
+            var spots =
+                (IEnumerable<Vector3D>)
+                    search.Invoke(
+                        null,
+                        new object[] { ship, (IReadOnlyList<BoundingSphereD>)others, 0.0 }
+                    );
+            foreach (Vector3D spot in spots)
+                if (others.Any(o => o.Intersects(new BoundingSphereD(spot, ship.Radius))))
+                    bad++;
+        }
+
+        return $"Probe clearspots: cases={cases} bad={bad}";
     }
 
     [Command("items", "The items in every inventory of a grid and the grids connected to it.")]

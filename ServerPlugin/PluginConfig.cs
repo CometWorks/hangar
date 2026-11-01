@@ -159,6 +159,26 @@ public class PluginConfig : PluginSdk.Config.PluginConfig, IPluginConfig
         set => SetField(ref field, value);
     } = HangarLoadMode.NearPlayer;
 
+    [BoolOption(
+        "Let players pick a near-player load with !hangar load <grid> true. Off: the default load placement mode decides for everyone.",
+        Parent = "save"
+    )]
+    public bool PlayersMayChooseLoadPlace
+    {
+        get;
+        set => SetField(ref field, value);
+    } = true;
+
+    [BoolOption(
+        "A grid loaded at its original position also stays clear of the other grids' bounding spheres, on every cluster node: when it would meet one, it goes to the nearest spot clear of all of them and of the terrain. Off: it is moved aside only when its box hits something. Not with AdminSafeZonesOnly.",
+        Parent = "save"
+    )]
+    public bool LoadClearOfGridSpheres
+    {
+        get;
+        set => SetField(ref field, value);
+    } = false;
+
     [DoubleOption(
         1,
         10000,

@@ -23,7 +23,10 @@ namespace ServerPlugin;
 public sealed class HangarStorage
 {
     private const string BlobDirectoryName = "GridBlobs";
-    private const string PluginId = "17C928CE-4645-4E1B-9365-C3C46BFE061D";
+    public const string PluginId = "17C928CE-4645-4E1B-9365-C3C46BFE061D";
+
+    /// <summary>How far in meters a load moves a grid to a free spot, at most</summary>
+    public const double FreeSpotReach = 10000;
 
     /// <summary>Number of leading id characters the list and the save reply show</summary>
     public const int ShownIdLength = 8;
@@ -344,12 +347,17 @@ public sealed class HangarStorage
         MyCharacter character,
         string selector,
         bool nearPlayer,
+        IReadOnlyList<BoundingSphereD> spheres,
         out HangarEntry entry,
+        out double moved,
         out string error
     )
     {
         entry = default;
+        moved = 0;
         error = null;
+        // The spheres of the other grids around its saved spot: LoadClearOfGridSpheres applies
+        var clearOfSpheres = spheres != null;
 
         if (!Config.Enabled)
         {
@@ -401,7 +409,11 @@ public sealed class HangarStorage
         if (zone != null)
             MoveInside(zone, grids);
 
-        if (!TryMoveToFreeSpace(grids, zone != null))
+        if (
+            clearOfSpheres
+                ? !TryMoveClearOfGrids(grids, spheres, out moved)
+                : !TryMoveToFreeSpace(grids, zone != null)
+        )
         {
             error = $"No free space to load {entry.GridName}. Clear the spot or load it elsewhere.";
             return false;
@@ -415,7 +427,11 @@ public sealed class HangarStorage
             return false;
         }
 
-        if (!AllowLoad(identityId, entry, ZoneName(zone ?? AdminZoneAt(bounds.Center)), out error))
+        // Moved off its spot by a sphere it hasn't changed zones: only the near-player load does
+        var backIn = clearOfSpheres
+            ? entry.Zone ?? ""
+            : ZoneName(zone ?? AdminZoneAt(bounds.Center));
+        if (!AllowLoad(identityId, entry, backIn, out error))
             return false;
 
         MyEntities.RemapObjectBuilderCollection(grids);
@@ -679,6 +695,80 @@ public sealed class HangarStorage
 
         Shift(grids, free.Value - sphere.Center);
         return true;
+    }
+
+    // Leaves the grids where they are when their bounding sphere meets no other grid's and their
+    // boxes hit nothing, as in IsObstructed, otherwise moves them all to the nearest spot clear of
+    // the spheres and of whatever else is there, terrain too. Safe zones only count when the grids
+    // weren't in one. False when there is no such spot within FreeSpotReach.
+    private static bool TryMoveClearOfGrids(
+        IReadOnlyList<MyObjectBuilder_CubeGrid> grids,
+        IReadOnlyList<BoundingSphereD> others,
+        out double moved
+    )
+    {
+        moved = 0;
+        var ship = grids
+            .Select(grid =>
+            {
+                var box = grid.CalculateBoundingBox();
+                return new BoundingSphereD(
+                    Vector3D.Transform((Vector3D)box.Center, WorldMatrix(grid)),
+                    box.HalfExtents.Length()
+                );
+            })
+            .Aggregate((merged, sphere) => BoundingSphereD.CreateMerged(merged, sphere));
+        if (!others.Any(other => other.Intersects(ship)) && !grids.Any(IsObstructed))
+            return true;
+
+        var center = ship.Center;
+        var inZone = MySessionComponentSafeZones.SafeZones.Any(zone =>
+            zone.Enabled && !zone.MarkedForClose && zone.Contains(center)
+        );
+        // Further out each round, for the terrain and the rest the spheres don't know about
+        for (var start = 0.0; start < FreeSpotReach; start = Math.Max(2 * ship.Radius, start * 2))
+        {
+            foreach (var spot in GridSpheres.ClearSpots(ship, others, start))
+            {
+                moved = Vector3D.Distance(spot, center);
+                if (moved > FreeSpotReach)
+                    break;
+                if (!IsFree(spot, ship.Radius, inZone))
+                    continue;
+
+                Shift(grids, spot - center);
+                return true;
+            }
+        }
+
+        moved = 0;
+        return false;
+    }
+
+    private static bool IsFree(Vector3D center, double radius, bool allowSafezones)
+    {
+        var sphere = new BoundingSphereD(center, radius);
+        if (
+            !MySession.IsInsideWorld(center)
+            || MySession.Static.VoxelMaps.GetOverlappingWithSphere(ref sphere) != null
+        )
+            return false;
+
+        var rotation = Quaternion.Identity;
+        HkShape shape = new HkSphereShape((float)radius);
+        try
+        {
+            return !MyEntities.IsShapePenetrating(
+                shape,
+                ref center,
+                ref rotation,
+                allowSafezones: allowSafezones
+            );
+        }
+        finally
+        {
+            shape.RemoveReference();
+        }
     }
 
     // Pulls the grids toward the center of a sphere zone until their bounds fit in it, if they can

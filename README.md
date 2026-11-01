@@ -57,10 +57,26 @@ entry remembers the zone it was saved in. A grid loaded in that zone goes back w
 was saved; in another zone it loads near the player and is pulled inside the zone, and a
 zone with no room for it refuses the load.
 
+`DefaultLoadMode` says where a loaded grid comes back, `NearPlayer` or `OriginalPosition`. By
+default it is in front of the player, and players may ask for that with
+`!hangar load <grid> true` in the other mode as well. Two options change that; at their
+defaults Hangar behaves as it did before they came:
+
+- `PlayersMayChooseLoadPlace` (default on). Off: `!hangar load <grid> true` is refused and the
+  default mode decides for everyone.
+- `LoadClearOfGridSpheres` (default off). On: a grid loaded at its original position, however
+  far that is from the player, must also stay clear of other grids' bounding spheres. When its
+  sphere would meet one, on any cluster node, it goes to the nearest spot clear of all of them
+  and of the terrain, within 10 km, and the reply says how far it moved. So a ship stored from
+  inside a station's shipyard comes back outside the station. A grid saved inside a safe zone
+  may stay in one; any other stays out of them. Off, it is moved aside only when its box hits
+  something. `AdminSafeZonesOnly` places grids its own way and doesn't use this.
+
 Other server plugins can check or charge for a load through
 `ServerPlugin.HangarHooks.BeforeLoad`, which they set by reflection. Hangar calls it once
 the grid's spot is found, with the player's identity id, the zone the grid was saved in,
-the zone it comes back in and its PCU. A non-null result refuses the load, and the player
+the zone it comes back in (with `LoadClearOfGridSpheres`, always the zone it was saved in) and
+its PCU. A non-null result refuses the load, and the player
 gets it as the reply.
 
 They can also store grids for a player who didn't ask, with `HangarHooks.Store`. It takes the
@@ -109,6 +125,10 @@ What it covers:
   the player or at the original position, keeping the original on save, rotor heads and
   docked ships with and without connected grids, a pilot getting out, and a load moved
   aside when another grid took its spot (`test_save_load.py`)
+- `PlayersMayChooseLoadPlace` and `LoadClearOfGridSpheres`: the saved spot however far the
+  player is, the nearest spot clear of another grid's bounding sphere, a ship stored from a
+  shipyard, safe zones, and the defaults behaving as before (`test_where_saved.py`, and a
+  config from before the options in `test_restart.py`)
 - Who may save what and how often: majority ownership, the slot, block and PCU limits,
   the save cooldown, and the plugin switched off (`test_rules.py`)
 - The `!hangar` and `!h` commands: list, info, entry selectors, remove and delete,
