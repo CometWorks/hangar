@@ -160,6 +160,106 @@ public sealed class HangarStorage
             return false;
         }
 
+        if (!Write(lease, steamId, ownerName, grids, zone, out entry, out error))
+            return false;
+
+        if (lease is null)
+        {
+            SetCooldown(steamId);
+            plugin.SaveConfig();
+        }
+        else
+        {
+            lease.State.LastSaveUtc = entry.SavedUtc;
+            lease.Save();
+        }
+
+        if (Config.RemoveOriginalOnSave)
+        {
+            foreach (var grid in grids)
+                grid.Close();
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// For another plugin, see <see cref="HangarHooks.Store"/>: the rules that are the player's own to
+    /// keep don't apply, as they didn't ask for this. It takes a slot and fits an entry's limits, and
+    /// the grids always leave the world. Full: there is no free slot.
+    /// </summary>
+    public bool TryStoreFor(
+        ulong steamId,
+        string ownerName,
+        IReadOnlyList<MyCubeGrid> grids,
+        Vector3D zoneAt,
+        out bool full,
+        out string error
+    )
+    {
+        full = false;
+        error = null;
+        if (!Config.Enabled)
+        {
+            error = "Hangar is disabled.";
+            return false;
+        }
+
+        using var lease = clusterIndex?.Acquire(steamId);
+        if (
+            Config.MaxEntriesPerPlayer > 0
+            && ListPlayerEntries(steamId).Count >= Config.MaxEntriesPerPlayer
+        )
+        {
+            full = true;
+            error = $"Hangar is full. Limit: {Config.MaxEntriesPerPlayer}.";
+            return false;
+        }
+
+        var blocks = grids.Sum(grid => grid.BlocksCount);
+        var pcu = grids.Sum(grid => grid.BlocksPCU);
+        if (Config.MaxBlocksPerEntry > 0 && blocks > Config.MaxBlocksPerEntry)
+        {
+            error = $"Grid is too large: {blocks} blocks, limit {Config.MaxBlocksPerEntry}.";
+            return false;
+        }
+
+        if (Config.MaxPcuPerEntry > 0 && pcu > Config.MaxPcuPerEntry)
+        {
+            error = $"Grid is too expensive: {pcu} PCU, limit {Config.MaxPcuPerEntry}.";
+            return false;
+        }
+
+        if (!Write(lease, steamId, ownerName, grids, AdminZoneAt(zoneAt), out _, out error))
+            return false;
+
+        if (lease is null)
+            plugin.SaveConfig();
+        else
+            lease.Save();
+
+        foreach (var grid in grids)
+            grid.Close();
+        return true;
+    }
+
+    // The grids' blob and their entry, which the caller still has to save
+    private bool Write(
+        ClusterHangarIndex.Lease lease,
+        ulong steamId,
+        string ownerName,
+        IReadOnlyList<MyCubeGrid> grids,
+        MySafeZone zone,
+        out HangarEntry entry,
+        out string error
+    )
+    {
+        entry = default;
+        error = null;
+        var mainGrid = GridFinder.BiggestGrid(grids);
+        var blocks = grids.Sum(grid => grid.BlocksCount);
+        var pcu = grids.Sum(grid => grid.BlocksPCU);
+
         EnsureStorage();
         var id = Guid.NewGuid().ToString("N");
         var relativePath = string.Join(
@@ -228,23 +328,11 @@ public sealed class HangarStorage
         };
 
         if (lease is not null)
-        {
             lease.State.Entries.Add(entry);
-            lease.State.LastSaveUtc = entry.SavedUtc;
-            lease.Save();
-        }
         else
         {
             Config.HangarEntries.Add(entry);
             Config.NotifyChanged(nameof(Config.HangarEntries));
-            SetCooldown(steamId);
-            plugin.SaveConfig();
-        }
-
-        if (Config.RemoveOriginalOnSave)
-        {
-            foreach (var grid in grids)
-                grid.Close();
         }
 
         return true;
