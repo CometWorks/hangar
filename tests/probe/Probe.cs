@@ -420,6 +420,28 @@ public sealed class ProbeCommands : CommandModule
         return "Probe hook: " + mode;
     }
 
+    // The grid and what is mechanically attached to it, for the player, as another plugin does
+    [Command(
+        "store",
+        "Calls HangarHooks.Store on a grid, for a player, with this point for the zone."
+    )]
+    [Permission(MyPromoteLevel.Admin)]
+    public string Store(string name, ulong steamId, double x, double y, double z)
+    {
+        var grid = Named(name).First();
+        var grids = MyCubeGridGroups
+            .Static.Mechanical.GetGroup(grid)
+            .Nodes.Select(n => n.NodeData)
+            .ToList();
+        var (stored, full, error) = ((bool, bool, string))
+            Plugin
+                .GetType()
+                .Assembly.GetType("ServerPlugin.HangarHooks")
+                .GetMethod("Store")
+                .Invoke(null, new object[] { steamId, "Stored", grids, new Vector3D(x, y, z) });
+        return $"Probe store: stored={stored}|full={full}|error={error}";
+    }
+
     [Command("patched", "The game methods Hangar's Harmony patches are on.")]
     [Permission(MyPromoteLevel.Admin)]
     public string Patched() =>

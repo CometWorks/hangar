@@ -63,6 +63,13 @@ the grid's spot is found, with the player's identity id, the zone the grid was s
 the zone it comes back in and its PCU. A non-null result refuses the load, and the player
 gets it as the reply.
 
+They can also store grids for a player who didn't ask, with `HangarHooks.Store`. It takes the
+player's Steam id and name, the grids and a point: the entry records the admin safe zone at
+that point. The grids leave the world whatever `RemoveOriginalOnSave` says. The save cooldown,
+majority ownership and `AdminSafeZonesOnly` don't apply and the cooldown doesn't start, but the
+slot limit and an entry's block and PCU limits do. The result says whether it was stored,
+whether the player has no free slot, and any other reason.
+
 The cluster launcher must set `CLUSTER_SHARED_ROOT`. For several Host machines,
 that path must be the same shared filesystem on every Host and support advisory
 file locks and atomic rename. Quasar currently provides the path automatically
@@ -113,7 +120,7 @@ What it covers:
 - Two cluster nodes sharing one storage: entries, slot limit and cooldown across nodes,
   and a node with legacy standalone entries (`test_cluster.py`)
 - Admin safe zones only: saving and loading outside a zone, a grid back in its own zone
-  or pulled into another one, a zone too small for it, and the `BeforeLoad` hook
+  or pulled into another one, a zone too small for it, and the `BeforeLoad` and `Store` hooks
   (`test_zones.py`)
 
 The world is the game's Empty World with the two test players, written fresh for every
